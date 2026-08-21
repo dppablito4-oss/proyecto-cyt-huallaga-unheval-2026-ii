@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 5. Botón: Probar alerta de voz
+  // 5. Botón: Probar alerta de voz rápida
   const testSpeechBtn = document.getElementById('btn-test-speech');
   if (testSpeechBtn) {
     testSpeechBtn.addEventListener('click', async () => {
@@ -66,10 +66,47 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('TTS resultado:', result);
       }
       testSpeechBtn.disabled = false;
-      testSpeechBtn.textContent = '🔊 Probar Alerta';
+      testSpeechBtn.textContent = '🔊 Probar Voz (TTS)';
     });
   }
 
-  // 6. Cargar la tabla de eventos inicial mediante petición REST
+  // 6. Botón: Reproducir texto personalizado
+  const playCustomBtn = document.getElementById('btn-play-custom');
+  const customTextInput = document.getElementById('custom-speech-text');
+  if (playCustomBtn && customTextInput) {
+    playCustomBtn.addEventListener('click', async () => {
+      const text = customTextInput.value.trim();
+      if (!text) return;
+      playCustomBtn.disabled = true;
+      playCustomBtn.textContent = '⏳ Sintetizando...';
+      const result = await API.testSpeech(text);
+      if (result) {
+        console.log('TTS personalizado reproducido:', result);
+      }
+      playCustomBtn.disabled = false;
+      playCustomBtn.textContent = '🔊 Reproducir';
+    });
+  }
+
+  // 7. Botón: Probar inferencia IA (GPT-5.6 Luna)
+  const testAiBtn = document.getElementById('btn-test-ai');
+  if (testAiBtn) {
+    testAiBtn.addEventListener('click', async () => {
+      testAiBtn.disabled = true;
+      testAiBtn.textContent = '🧠 Analizando...';
+      const result = await API.testAnalysis(true, 3);
+      if (result) {
+        console.log('Resultado prueba IA:', result);
+        const diagEl = document.getElementById('analysis-diagnosis');
+        if (diagEl && result.analysis) {
+          diagEl.textContent = `${result.analysis.description || 'Completado'} [Decisión: ${result.decision}]`;
+        }
+      }
+      testAiBtn.disabled = false;
+      testAiBtn.textContent = '🧪 Probar Inferencia IA';
+    });
+  }
+
+  // 8. Cargar la tabla de eventos inicial mediante petición REST
   Dashboard.renderEventsTable();
 });

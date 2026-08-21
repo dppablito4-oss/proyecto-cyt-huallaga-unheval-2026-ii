@@ -80,7 +80,16 @@
         <div class="control-buttons">
           <button class="btn btn-success" id="btn-start-pipeline">▶ Iniciar Monitoreo</button>
           <button class="btn btn-danger" id="btn-stop-pipeline">⏹ Detener Monitoreo</button>
-          <button class="btn btn-sm" id="btn-test-speech">🔊 Probar Alerta</button>
+          <button class="btn btn-sm" id="btn-test-speech">🔊 Probar Voz (TTS)</button>
+          <button class="btn btn-sm" id="btn-test-ai">🧪 Probar Inferencia IA</button>
+        </div>
+
+        <div class="demo-test-section" style="margin-bottom: 1rem; padding: 0.8rem; background: rgba(15, 23, 42, 0.6); border-radius: 8px; border: 1px dashed rgba(56, 189, 248, 0.3);">
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.4rem;">💬 <strong>Mensaje de Prueba para el Altavoz:</strong></div>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" id="custom-speech-text" value="Atención. Por favor, conservemos limpia la ribera del río Huallaga. No arroje residuos sólidos." style="flex: 1; padding: 0.4rem 0.6rem; border-radius: 6px; background: rgba(30, 41, 59, 0.9); border: 1px solid var(--panel-border); color: #fff; font-size: 0.8rem;">
+            <button class="btn btn-sm" id="btn-play-custom" style="white-space: nowrap;">🔊 Reproducir</button>
+          </div>
         </div>
 
         <div class="analysis-box" id="analysis-box">

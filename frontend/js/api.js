@@ -101,5 +101,24 @@ const API = {
       console.error('Error al probar TTS:', e);
       return null;
     }
+  },
+
+  /**
+   * Prueba el análisis de visión multimodal con fotogramas del buffer o sintéticos.
+   * Endpoint: POST /api/debug/test-analysis
+   */
+  async testAnalysis(useBuffer = true, numFrames = 3) {
+    try {
+      const res = await fetch('/api/debug/test-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ use_buffer: useBuffer, num_frames: numFrames })
+      });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error('Error al probar análisis IA:', e);
+      return null;
+    }
   }
 };

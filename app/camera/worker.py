@@ -229,14 +229,14 @@ class VideoPipelineWorker:
             event.capture.selected_frames = len(selected)
             event.capture.jpeg_quality = settings.JPEG_QUALITY
 
-            # 5. Comprimir y convertir a Base64 Data URL
-            image_urls = []
+            # 5. Comprimir frames a JPEG binario (ImageProcessor solo procesa imagen)
+            jpeg_frames = []
             for ts, frame in selected:
-                data_url = self._image_processor.to_base64_data_url(frame)
-                image_urls.append(data_url)
+                jpeg_bytes = self._image_processor.compress_jpeg(frame)
+                jpeg_frames.append(jpeg_bytes)
 
-            # 6. Enviar a la IA multimodal
-            ai_result = self._vision_ai.analyze_sequence(image_urls)
+            # 6. Enviar a VisionAIClient (maneja serialización Base64 y request de red)
+            ai_result = self._vision_ai.analyze_sequence(jpeg_frames)
             event.analysis = ai_result.model_dump()
 
             # 7. Evaluar decisión

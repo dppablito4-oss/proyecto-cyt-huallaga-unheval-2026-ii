@@ -1,45 +1,43 @@
 """
-Módulo de Procesamiento y Compresión de Imágenes (ImageProcessor)
-=================================================================
+Módulo de Procesamiento y Optimización de Imágenes (ImageProcessor)
+===================================================================
 
 Responsabilidad:
 ----------------
-Realizar las transformaciones de imagen necesarias para optimizar el consumo de red
-y adecuar las imágenes para las APIs multimodales de visión:
+Realizar exclusivamente transformaciones visuales y compresión de imágenes:
 - Redimensionamiento proporcional (downscaling) si el ancho excede `settings.IMAGE_MAX_WIDTH`.
-- Compresión JPEG controlada con calidad configurable (`settings.JPEG_QUALITY`).
-- Codificación a formato Base64 Data URL (`data:image/jpeg;base64,...`).
-- Guardado opcional de fotogramas en disco (`data/frames/`) para auditoría y registro experimental.
+- Compresión JPEG controlada con factor de calidad configurable (`settings.JPEG_QUALITY`).
+- Guardado opcional de fotogramas procesados en disco (`data/frames/`) para auditoría.
 
-Flujo de invocación:
+Principio de diseño:
 --------------------
-- Recibe los fotogramas seleccionados por `app.vision.frame_selector.FrameSelector`.
-- Convierte cada matriz OpenCV a Data URL Base64 para ser consumido por `app.ai.vision_client.VisionAI`.
+`ImageProcessor` NO conoce los detalles del transporte o API de OpenAI (no genera Base64).
+La serialización y construcción del payload de red corresponde a `VisionAIClient`.
 """
 
 import cv2
-import base64
-from typing import Tuple, Optional, Any
+from typing import Any
 from pathlib import Path
 
 
 class ImageProcessor:
     """
-    Motor de compresión y codificación de imágenes para transmisión eficiente.
+    Motor de compresión y redimensionamiento de imágenes.
+    Desacoplado de los mecanismos de transporte o proveedores de IA.
     """
 
     def __init__(self, max_width: int = 1280, jpeg_quality: int = 70):
         """
         Args:
-            max_width (int): Ancho máximo en píxeles. Si la imagen es más grande, se redimensiona.
-            jpeg_quality (int): Factor de calidad JPEG entre 1 (muy baja) y 100 (máxima).
+            max_width (int): Ancho máximo horizontal en píxeles.
+            jpeg_quality (int): Factor de calidad JPEG entre 1 (mínimo) y 100 (máximo).
         """
         self.max_width = max_width
         self.jpeg_quality = jpeg_quality
 
     def resize_if_needed(self, frame: Any) -> Any:
         """
-        Redimensiona la imagen conservando la relación de aspecto solo si su ancho supera `max_width`.
+        Redimensiona la imagen conservando la relación de aspecto únicamente si su ancho supera `max_width`.
         """
         h, w = frame.shape[:2]
         if w > self.max_width:
@@ -51,7 +49,7 @@ class ImageProcessor:
 
     def compress_jpeg(self, frame: Any) -> bytes:
         """
-        Aplica compresión JPEG y retorna los bytes binarios de la imagen.
+        Aplica compresión JPEG y retorna los bytes binarios de la imagen procesada.
         """
         resized = self.resize_if_needed(frame)
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality]
@@ -59,15 +57,6 @@ class ImageProcessor:
         if not success:
             raise ValueError("Error al codificar la matriz de imagen a formato JPEG.")
         return buffer.tobytes()
-
-    def to_base64_data_url(self, frame: Any) -> str:
-        """
-        Convierte una matriz OpenCV en un string Base64 compatible con la API de OpenAI Vision.
-        Formato: `data:image/jpeg;base64,<payload>`
-        """
-        jpeg_bytes = self.compress_jpeg(frame)
-        base64_str = base64.b64encode(jpeg_bytes).decode('utf-8')
-        return f"data:image/jpeg;base64,{base64_str}"
 
     def save_image(self, frame: Any, output_path: str) -> bool:
         """

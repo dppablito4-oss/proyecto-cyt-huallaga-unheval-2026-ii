@@ -1,24 +1,26 @@
 """
-Módulo de Cliente de Visión Multimodal (VisionAI)
-=================================================
+Módulo de Cliente de Visión Multimodal (VisionAIClient)
+======================================================
 
 Responsabilidad:
 ----------------
-Encapsular la comunicación con la API de Visión Multimodal de OpenAI (por defecto `gpt-4o`).
-Recibe la lista de imágenes seleccionadas en formato Base64 Data URL, aplica el prompt
-del sistema especializado y obtiene una respuesta validada bajo el esquema Pydantic `AIAnalysisResult`.
+Encapsular la serialización de transporte (conversión a Base64 Data URL), construcción del
+payload y comunicación con la API de Visión Multimodal de OpenAI (por defecto `gpt-5.6-luna`).
+Recibe los fotogramas binarios (JPEG bytes) procesados por `ImageProcessor` y obtiene una
+respuesta validada bajo el esquema Pydantic `AIAnalysisResult`.
 
 Flujo de invocación:
 --------------------
-- Recibe la secuencia procesada por `app.vision.image_processor.ImageProcessor.to_base64_data_url()`.
-- Si `settings.OPENAI_API_KEY` está ausente, opera en **modo simulación (mock)** retornando un
-  resultado estructurado seguro para permitir el desarrollo y pruebas locales sin costo de tokens.
-- Si hay API Key válida, realiza la llamada mediante `client.beta.chat.completions.parse()`.
-- Entrega el resultado a `app.events.rules.DecisionEngine`.
+- Recibe la lista de bytes JPEG comprimidos entregados por `ImageProcessor.compress_jpeg()`.
+- Convierte cada imagen a Base64 Data URL internamente (`data:image/jpeg;base64,...`).
+- Inyecta el prompt del sistema especializado (`prompts/environmental_event.txt`).
+- Ejecuta la inferencia estructurada con `client.beta.chat.completions.parse()`.
+- Entrega el `AIAnalysisResult` al `DecisionEngine`.
 """
 
+import base64
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 from app.config import settings
 from app.models.analysis import AIAnalysisResult
 from app.ai.prompts import load_system_prompt
@@ -26,16 +28,17 @@ from app.ai.prompts import load_system_prompt
 logger = logging.getLogger(__name__)
 
 
-class VisionAI:
+class VisionAIClient:
     """
-    Cliente de inferencia multimodal para análisis de secuencias de video.
+    Cliente de transporte e inferencia multimodal para análisis de secuencias de video.
+    Maneja la serialización Base64 y la comunicación con OpenAI.
     """
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         """
         Args:
             api_key (str, opcional): Clave secreta de la API de OpenAI. Si es None, lee de `settings`.
-            model (str, opcional): Nombre del modelo de visión (ej. 'gpt-4o').
+            model (str, opcional): Nombre del modelo de visión (ej. 'gpt-5.6-luna').
         """
         self.api_key = api_key or settings.OPENAI_API_KEY
         self.model = model or settings.OPENAI_VISION_MODEL
@@ -48,7 +51,7 @@ class VisionAI:
         advierte en el log y deja el cliente en modo simulación (mock).
         """
         if not self.api_key:
-            logger.warning("OPENAI_API_KEY no configurada. VisionAI operará en modo placeholder/mock.")
+            logger.warning("OPENAI_API_KEY no configurada. VisionAIClient operará en modo placeholder/mock.")
             return False
         try:
             from openai import OpenAI
@@ -60,36 +63,48 @@ class VisionAI:
             logger.error(f"Error al inicializar el cliente OpenAI: {e}")
             return False
 
-    def analyze_sequence(self, image_data_urls: List[str]) -> AIAnalysisResult:
+    @staticmethod
+    def _bytes_to_data_url(image_bytes: bytes) -> str:
+        """Convierte bytes JPEG binarios en string Base64 Data URL."""
+        b64 = base64.b64encode(image_bytes).decode('utf-8')
+        return f"data:image/jpeg;base64,{b64}"
+
+    def analyze_sequence(self, images: List[Union[bytes, str]]) -> AIAnalysisResult:
         """
-        Envía la secuencia de imágenes a OpenAI Vision y analiza los cambios temporales.
+        Serializa las imágenes y envía la secuencia a OpenAI Vision para análisis temporal.
 
         Args:
-            image_data_urls (List[str]): Lista de strings Data URL Base64 de las imágenes.
+            images (List[bytes | str]): Lista de bytes JPEG o strings Data URL Base64.
 
         Returns:
-            AIAnalysisResult: Objeto Pydantic con la detección, confianza, descripción y recomendación.
+            AIAnalysisResult: Objeto Pydantic con la clasificación estructurada.
         """
         # Modo simulación seguro para arranques sin API Key (Fase 0)
         if not self._initialized or not self.client:
-            logger.info("Retornando resultado simulado (mock) de VisionAI por falta de API Key.")
+            logger.info("Retornando resultado simulado (mock) de VisionAIClient por falta de API Key.")
             return AIAnalysisResult(
-                event_detected=False,
+                person_detected=False,
+                suspected_disposal=False,
+                action_completed=False,
                 confidence=0.0,
-                event_type="none",
-                object=None,
-                description="Simulación Fase 0: El sistema está ejecutándose en modo seguro sin llamadas a API.",
-                recommended_action="ignore",
+                event_type="NO_EVENT",
+                description="Simulación: Sistema ejecutándose en modo seguro sin llamadas a API.",
                 warning_message=None
             )
 
         # Cargar el prompt especializado desde prompts/environmental_event.txt
         system_prompt = load_system_prompt()
 
-        # Construir el payload de mensajes con las imágenes
-        image_detail = settings.IMAGE_DETAIL  # 'medium' por defecto para GPT-5.6 Luna
+        # Construir el payload de mensajes convirtiendo a Base64 Data URL si vienen en bytes
+        image_detail = settings.IMAGE_DETAIL  # 'auto' o 'high'
         content = [{"type": "text", "text": "Analiza la siguiente secuencia cronológica de fotogramas:"}]
-        for idx, url in enumerate(image_data_urls):
+
+        for item in images:
+            if isinstance(item, bytes):
+                url = self._bytes_to_data_url(item)
+            else:
+                url = str(item)
+
             content.append({
                 "type": "image_url",
                 "image_url": {
@@ -99,7 +114,7 @@ class VisionAI:
             })
 
         try:
-            # Uso de respuestas estructuradas nativas de OpenAI con validación Pydantic
+            # Respuestas estructuradas nativas de OpenAI con validación Pydantic
             response = self.client.beta.chat.completions.parse(
                 model=self.model,
                 messages=[
@@ -113,11 +128,15 @@ class VisionAI:
         except Exception as e:
             logger.error(f"Error en la llamada a OpenAI Vision API: {e}")
             return AIAnalysisResult(
-                event_detected=False,
+                person_detected=False,
+                suspected_disposal=False,
+                action_completed=False,
                 confidence=0.0,
-                event_type="none",
-                object=None,
+                event_type="UNCERTAIN",
                 description=f"Error durante el análisis de visión: {e}",
-                recommended_action="ignore",
                 warning_message=None
             )
+
+
+# Alias para mantener compatibilidad con el resto del proyecto
+VisionAI = VisionAIClient

@@ -85,7 +85,7 @@ def test_analysis(payload: AnalysisTestRequest):
     vision.initialize()
     decision_engine = DecisionEngine(warning_threshold=settings.AI_WARNING_THRESHOLD)
 
-    image_urls = []
+    jpeg_frames = []
 
     if payload.use_buffer:
         # Intentar obtener frames del buffer del pipeline activo
@@ -94,23 +94,23 @@ def test_analysis(payload: AnalysisTestRequest):
             if hasattr(pipeline_worker, '_frame_buffer'):
                 frames = pipeline_worker._frame_buffer.get_last_n_frames(payload.num_frames)
                 for ts, frame in frames:
-                    image_urls.append(processor.to_base64_data_url(frame))
+                    jpeg_frames.append(processor.compress_jpeg(frame))
         except Exception:
             pass
 
     # Si no hay frames del buffer, generar frames sintéticos
-    if not image_urls:
+    if not jpeg_frames:
         for i in range(payload.num_frames):
             fake = np.random.randint(0, 256, (720, 1280, 3), dtype=np.uint8)
-            image_urls.append(processor.to_base64_data_url(fake))
+            jpeg_frames.append(processor.compress_jpeg(fake))
 
-    # Ejecutar análisis
-    ai_result = vision.analyze_sequence(image_urls)
+    # Ejecutar análisis con VisionAIClient (maneja Base64 internamente)
+    ai_result = vision.analyze_sequence(jpeg_frames)
     decision = decision_engine.evaluate_decision(ai_result)
 
     return {
-        "frames_analyzed": len(image_urls),
-        "source": "buffer" if payload.use_buffer and image_urls else "synthetic",
+        "frames_analyzed": len(jpeg_frames),
+        "source": "buffer" if payload.use_buffer and jpeg_frames else "synthetic",
         "model": settings.OPENAI_VISION_MODEL,
         "image_detail": settings.IMAGE_DETAIL,
         "analysis": ai_result.model_dump(),
