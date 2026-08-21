@@ -1,0 +1,26 @@
+[project]
+name = "huallaga-ai-monitor"
+version = "0.1.0"
+description = "Sistema inteligente de vigilancia ambiental para detección preventiva del arrojo de residuos sólidos en la ribera del río Huallaga"
+authors = [
+    { name = "Proyecto CyT Huallaga UNHEVAL", email = "investigacion@unheval.edu.pe" }
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.28.0",
+    "opencv-python>=4.9.0",
+    "ultralytics>=8.1.0",
+    "openai>=1.14.0",
+    "Pillow>=10.2.0",
+    "numpy>=1.26.0",
+    "python-dotenv>=1.0.1",
+    "httpx>=0.27.0",
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.0"
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

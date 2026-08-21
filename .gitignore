@@ -1,0 +1,39 @@
+# Environment and Secrets
+.env
+*.env
+!.env.example
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Data and Storage generated at runtime
+data/events/*
+!data/events/.gitkeep
+data/frames/*
+!data/frames/.gitkeep
+data/audio/*
+!data/audio/.gitkeep
+data/test_videos/*
+!data/test_videos/.gitkeep
+
+# SQLite database
+*.db
+*.sqlite
+*.sqlite3
+
+# Weights and large model files
+*.pt
+*.onnx
+*.engine
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

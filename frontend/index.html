@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Huallaga AI Monitor — Vigilancia Ambiental</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo-badge">🌊</div>
+        <div>
+          <h1>Huallaga AI Monitor</h1>
+          <p class="subtitle">Vigilancia Ambiental e Inteligencia Artificial en la Ribera del Río Huallaga</p>
+        </div>
+      </div>
+      <div class="status-indicators">
+        <div class="status-pill" id="system-status-pill">
+          <span class="status-dot green"></span>
+          <span id="system-status-text">Sistema: Activo</span>
+        </div>
+        <div class="status-pill" id="camera-status-pill">
+          <span class="status-dot yellow"></span>
+          <span id="camera-status-text">Cámara: Standby</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Grid -->
+    <main class="dashboard-grid">
+      <!-- Left Column: Video Preview & Local Detection -->
+      <section class="card video-card">
+        <div class="card-header">
+          <h2>📷 Cámara en Vivo</h2>
+          <span class="badge" id="fps-badge">0 FPS</span>
+        </div>
+        <div class="video-container">
+          <div class="video-placeholder" id="video-feed">
+            <div class="camera-off-state">
+              <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+              </svg>
+              <p>Fuente de cámara en espera / Standby</p>
+            </div>
+          </div>
+        </div>
+        <div class="detection-bar">
+          <div class="stat-item">
+            <span class="stat-label">Personas detectadas</span>
+            <span class="stat-value" id="persons-count">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Evento Activo</span>
+            <span class="stat-value highlight" id="active-event-state">No</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Modelo Visión</span>
+            <span class="stat-value" id="ai-model-name">gpt-4o</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: AI Analysis & Decision Engine -->
+      <section class="card analysis-card">
+        <div class="card-header">
+          <h2>🧠 Análisis Multimodal</h2>
+          <span class="badge blue" id="event-cooldown-badge">Listo</span>
+        </div>
+
+        <div class="analysis-box" id="analysis-box">
+          <div class="analysis-row">
+            <span class="label">Último Evento:</span>
+            <span class="value" id="last-event-time">Sin registros</span>
+          </div>
+          <div class="analysis-row">
+            <span class="label">Nivel de Confianza:</span>
+            <div class="confidence-bar-wrapper">
+              <div class="confidence-bar" id="confidence-bar" style="width: 0%;"></div>
+            </div>
+            <span class="confidence-percent" id="confidence-percent">0%</span>
+          </div>
+          <div class="analysis-row">
+            <span class="label">Diagnóstico IA:</span>
+            <span class="value" id="analysis-diagnosis">Esperando evento...</span>
+          </div>
+        </div>
+
+        <!-- Warning Alert Box -->
+        <div class="warning-alert-box" id="warning-box">
+          <div class="alert-icon">🔊</div>
+          <div>
+            <h3>Advertencia Emitida</h3>
+            <p id="warning-text">"Sin advertencias emitidas en la sesión actual."</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bottom Full-Width: Events & Academic Metrics -->
+      <section class="card metrics-card">
+        <div class="card-header">
+          <h2>📊 Métricas Experimentales y Registros</h2>
+          <button class="btn btn-sm" id="btn-refresh-events">Actualizar Registros</button>
+        </div>
+        <div class="table-responsive">
+          <table class="metrics-table">
+            <thead>
+              <tr>
+                <th>ID Evento</th>
+                <th>Fecha/Hora</th>
+                <th>Personas (YOLO)</th>
+                <th>Confianza IA</th>
+                <th>Decisión</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="events-table-body">
+              <tr>
+                <td colspan="6" class="text-center text-muted">No se han registrado eventos todavía.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>Prototipo de Investigación v0.1 — Universidad Nacional Hermilio Valdizán (UNHEVAL) / Proyecto CyT Huallaga</p>
+    </footer>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/websocket.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
