@@ -164,13 +164,13 @@ flowchart TD
 ### 5.1. Esquema de Inferencia Multimodal (`AIAnalysisResult`)
 ```json
 {
-  "event_detected": true,
+  "person_detected": true,
+  "suspected_disposal": true,
+  "action_completed": true,
   "confidence": 0.92,
-  "event_type": "possible_littering",
-  "object": "botella de plástico PET",
+  "event_type": "WASTE_DISPOSAL",
   "description": "El transeúnte camina por la faja marginal del Malecón Walker Soberón y arroja una botella hacia la pendiente del río.",
-  "recommended_action": "warn",
-  "warning_message": "Por favor, no arroje botellas a la ribera. Ayúdenos a conservar limpio el río Huallaga."
+  "warning_message": "Atención. Por favor, recuerde recoger su botella y depositarla en los tachos habilitados. Cuidemos la ribera del río Huallaga."
 }
 ```
 

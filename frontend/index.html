@@ -3,59 +3,127 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Huallaga AI Monitor — Vigilancia Ambiental</title>
+  <title>Huallaga AI Monitor — Sistema Inteligente de Vigilancia Ambiental</title>
+  
+  <!-- Modern Typography Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Core Design System Stylesheet -->
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
   <div class="app-container">
-    <!-- Header -->
+    
+    <!-- ====================================================================
+         TOP HEADER & BRAND IDENTITY
+         ==================================================================== -->
     <header class="app-header">
       <div class="brand">
         <div class="logo-badge">🌊</div>
         <div>
-          <h1>Huallaga AI Monitor</h1>
+          <h1>
+            Huallaga AI Monitor
+            <span class="academic-badge">UNHEVAL 2026</span>
+          </h1>
           <p class="subtitle">Vigilancia Ambiental e Inteligencia Artificial en la Ribera del Río Huallaga</p>
         </div>
       </div>
       <div class="status-indicators">
-        <div class="status-pill" id="system-status-pill">
+        <div class="status-pill" id="system-status-pill" title="Estado del bucle FastAPI / Worker">
           <span class="status-dot green"></span>
           <span id="system-status-text">Sistema: Activo</span>
         </div>
-        <div class="status-pill" id="camera-status-pill">
+        <div class="status-pill" id="camera-status-pill" title="Dispositivo de video local o RTSP">
           <span class="status-dot yellow"></span>
           <span id="camera-status-text">Cámara: Standby</span>
+        </div>
+        <div class="status-pill" id="voice-status-pill" title="Motor TTS con voz Onyx">
+          <span class="status-dot green"></span>
+          <span>Voz: Onyx (TTS)</span>
         </div>
       </div>
     </header>
 
-    <!-- Main Grid -->
+    <!-- ====================================================================
+         CONTROL RIBBON / ACTION TOOLBAR
+         ==================================================================== -->
+    <section class="control-ribbon">
+      <div class="control-group">
+        <span class="ribbon-label">Control de Flujo:</span>
+        <button class="btn btn-success" id="btn-start-pipeline">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          Iniciar Monitoreo
+        </button>
+        <button class="btn btn-danger" id="btn-stop-pipeline">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
+          Detener
+        </button>
+      </div>
+
+      <div class="control-group">
+        <span class="ribbon-label">Pruebas en Vivo:</span>
+        <button class="btn btn-primary" id="btn-test-speech">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          Probar Voz (Onyx)
+        </button>
+        <button class="btn btn-purple" id="btn-test-ai">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2"/></svg>
+          Inferencia GPT-5.6 Luna
+        </button>
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         MAIN TELEMETRY & MULTIMODAL GRID
+         ==================================================================== -->
     <main class="dashboard-grid">
-      <!-- Left Column: Video Preview & Local Detection -->
+      
+      <!-- LEFT COLUMN: LIVE VIDEO FEED & COMPUTER VISION HUD -->
       <section class="card video-card">
         <div class="card-header">
-          <h2>📷 Cámara en Vivo</h2>
-          <span class="badge" id="fps-badge">0 FPS</span>
+          <h2>
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            Cámara en Tiempo Real
+          </h2>
+          <span class="badge cyan" id="fps-badge">0.0 FPS</span>
         </div>
+
         <div class="video-container">
-          <!-- Stream MJPEG en vivo (oculto hasta que la cámara conecte) -->
-          <img id="live-stream" src="/api/cameras/stream" alt="Feed de cámara en vivo" style="display:none; width:100%; height:100%; object-fit:cover; border-radius: 8px;">
-          <!-- Placeholder de standby -->
+          <!-- Live MJPEG Stream -->
+          <img id="live-stream" src="/api/cameras/stream" alt="Feed de cámara en vivo" style="display:none; width:100%; height:100%; object-fit:cover;">
+          
+          <!-- Standby State Placeholder -->
           <div class="video-placeholder" id="video-placeholder">
             <div class="camera-off-state">
               <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
               </svg>
-              <p>Fuente de cámara en espera / Standby</p>
+              <p>Cámara en Espera / Standby</p>
+              <span style="font-size: 0.75rem; color: var(--text-dim);">Haz clic en "Iniciar Monitoreo" para activar la captura</span>
+            </div>
+          </div>
+
+          <!-- Video HUD Overlay -->
+          <div class="video-hud">
+            <div class="hud-top">
+              <div class="hud-tag rec" id="hud-live-tag" style="display:none;">
+                <span class="rec-dot"></span> EN DIRECTO
+              </div>
+              <div class="hud-tag" id="hud-res-tag">1280x720</div>
+            </div>
+            <div class="hud-bottom">
+              <span id="hud-cam-id">CAM_001 • Ribera Huallaga</span>
+              <span id="hud-timestamp">--:--:--</span>
             </div>
           </div>
         </div>
+
+        <!-- Real-Time Telemetry Bar -->
         <div class="detection-bar">
           <div class="stat-item">
-            <span class="stat-label">Personas detectadas</span>
+            <span class="stat-label">Personas (YOLO)</span>
             <span class="stat-value" id="persons-count">0</span>
           </div>
           <div class="stat-item">
@@ -66,81 +134,117 @@
             <span class="stat-label">Modelo Visión</span>
             <span class="stat-value" id="ai-model-name">gpt-5.6-luna</span>
           </div>
+          <div class="stat-item">
+            <span class="stat-label">Detalle Imagen</span>
+            <span class="stat-value highlight" id="image-detail-val">Auto</span>
+          </div>
         </div>
       </section>
 
-      <!-- Right Column: AI Analysis & Decision Engine -->
+      <!-- RIGHT COLUMN: MULTIMODAL AI & DECISION CENTER -->
       <section class="card analysis-card">
         <div class="card-header">
-          <h2>🧠 Análisis Multimodal</h2>
-          <span class="badge blue" id="event-cooldown-badge">Listo</span>
+          <h2>
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.04z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.04z"/></svg>
+            Centro de Decisiones e Inferencia
+          </h2>
+          <span class="badge emerald" id="decision-status-badge">STANDBY</span>
         </div>
 
-        <!-- Control Buttons -->
-        <div class="control-buttons">
-          <button class="btn btn-success" id="btn-start-pipeline">▶ Iniciar Monitoreo</button>
-          <button class="btn btn-danger" id="btn-stop-pipeline">⏹ Detener Monitoreo</button>
-          <button class="btn btn-sm" id="btn-test-speech">🔊 Probar Voz (TTS)</button>
-          <button class="btn btn-sm" id="btn-test-ai">🧪 Probar Inferencia IA</button>
-        </div>
-
-        <div class="demo-test-section" style="margin-bottom: 1rem; padding: 0.8rem; background: rgba(15, 23, 42, 0.6); border-radius: 8px; border: 1px dashed rgba(56, 189, 248, 0.3);">
-          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.4rem;">💬 <strong>Mensaje de Prueba para el Altavoz:</strong></div>
-          <div style="display: flex; gap: 0.5rem;">
-            <input type="text" id="custom-speech-text" value="Atención. Por favor, conservemos limpia la ribera del río Huallaga. No arroje residuos sólidos." style="flex: 1; padding: 0.4rem 0.6rem; border-radius: 6px; background: rgba(30, 41, 59, 0.9); border: 1px solid var(--panel-border); color: #fff; font-size: 0.8rem;">
-            <button class="btn btn-sm" id="btn-play-custom" style="white-space: nowrap;">🔊 Reproducir</button>
-          </div>
-        </div>
-
-        <div class="analysis-box" id="analysis-box">
+        <!-- AI Diagnostic Box -->
+        <div class="analysis-box">
           <div class="analysis-row">
             <span class="label">Último Evento:</span>
             <span class="value" id="last-event-time">Sin registros</span>
           </div>
+
           <div class="analysis-row">
-            <span class="label">Nivel de Confianza:</span>
-            <div class="confidence-bar-wrapper">
-              <div class="confidence-bar" id="confidence-bar" style="width: 0%;"></div>
+            <span class="label">Nivel de Certeza:</span>
+            <div class="confidence-meter-container">
+              <div class="confidence-bar-wrapper">
+                <div class="confidence-bar" id="confidence-bar"></div>
+              </div>
+              <span class="confidence-percent" id="confidence-percent">0%</span>
             </div>
-            <span class="confidence-percent" id="confidence-percent">0%</span>
           </div>
-          <div class="analysis-row">
-            <span class="label">Diagnóstico IA:</span>
-            <span class="value" id="analysis-diagnosis">Esperando evento...</span>
+
+          <!-- Structured Boolean Flags -->
+          <div class="flags-grid">
+            <div class="flag-badge" id="flag-person">
+              <span>👤 Persona:</span> <strong id="val-flag-person">No</strong>
+            </div>
+            <div class="flag-badge" id="flag-suspect">
+              <span>📦 Residuo:</span> <strong id="val-flag-suspect">No</strong>
+            </div>
+            <div class="flag-badge" id="flag-completed">
+              <span>⚠️ Consumado:</span> <strong id="val-flag-completed">No</strong>
+            </div>
+          </div>
+
+          <!-- Diagnostic Description -->
+          <div class="diagnosis-text-block" id="analysis-diagnosis">
+            Esperando detección de personas para iniciar análisis temporal...
           </div>
         </div>
 
-        <!-- Warning Alert Box -->
+        <!-- Warning Voice Announcement Alert Box -->
         <div class="warning-alert-box" id="warning-box">
-          <div class="alert-icon">🔊</div>
+          <div class="alert-icon">📢</div>
           <div>
-            <h3>Advertencia Emitida</h3>
+            <h3>
+              Advertencia Verbal Emitida
+              <span class="badge amber" style="font-size: 0.65rem;">Voz Onyx</span>
+            </h3>
             <p id="warning-text">"Sin advertencias emitidas en la sesión actual."</p>
+          </div>
+        </div>
+
+        <!-- Interactive Voice Sandbox (Testing Area) -->
+        <div class="demo-test-section">
+          <div class="demo-title">
+            <span>🎙️ Sintetizador de Mensajes al Altavoz:</span>
+            <span style="font-size: 0.7rem; color: var(--primary-light);">Locución TV Neutro</span>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" id="custom-speech-text" class="custom-speech-input" value="Atención. Por favor, recuerde recoger su botella y depositarla en los tachos habilitados. Cuidemos la ribera del río Huallaga.">
+            <button class="btn btn-primary btn-sm" id="btn-play-custom" style="white-space: nowrap;">
+              🔊 Reproducir
+            </button>
           </div>
         </div>
       </section>
 
-      <!-- Bottom Full-Width: Events & Academic Metrics -->
+      <!-- BOTTOM FULL-WIDTH: ACADEMIC METRICS & EVENT HISTORY -->
       <section class="card metrics-card">
         <div class="card-header">
-          <h2>📊 Métricas Experimentales y Registros</h2>
-          <button class="btn btn-sm" id="btn-refresh-events">Actualizar Registros</button>
+          <h2>
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+            Registro Experimental y Métricas de Vigilancia
+          </h2>
+          <button class="btn btn-primary btn-sm" id="btn-refresh-events">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Actualizar Tabla
+          </button>
         </div>
+
         <div class="table-responsive">
           <table class="metrics-table">
             <thead>
               <tr>
                 <th>ID Evento</th>
-                <th>Fecha/Hora</th>
+                <th>Fecha / Hora</th>
                 <th>Personas (YOLO)</th>
-                <th>Confianza IA</th>
+                <th>Tipo de Evento</th>
+                <th>Certeza IA</th>
                 <th>Decisión</th>
-                <th>Estado</th>
+                <th>Acción Consumada</th>
               </tr>
             </thead>
             <tbody id="events-table-body">
               <tr>
-                <td colspan="6" class="text-center text-muted">No se han registrado eventos todavía.</td>
+                <td colspan="7" class="text-center text-muted" style="padding: 1.5rem;">
+                  No se han registrado eventos todavía en la sesión actual.
+                </td>
               </tr>
             </tbody>
           </table>
@@ -148,12 +252,20 @@
       </section>
     </main>
 
-    <!-- Footer -->
+    <!-- ====================================================================
+         FOOTER
+         ==================================================================== -->
     <footer class="app-footer">
-      <p>Prototipo de Investigación v0.1 — Universidad Nacional Hermilio Valdizán (UNHEVAL) / Proyecto CyT Huallaga</p>
+      <div>
+        <strong>Huallaga AI Monitor</strong> • Prototipo Experimental v0.1.0 • UNHEVAL
+      </div>
+      <div>
+        Investigación de Inteligencia Artificial para la Preservación de la Cuenca del Río Huallaga
+      </div>
     </footer>
   </div>
 
+  <!-- Scripts -->
   <script src="js/api.js"></script>
   <script src="js/websocket.js"></script>
   <script src="js/dashboard.js"></script>

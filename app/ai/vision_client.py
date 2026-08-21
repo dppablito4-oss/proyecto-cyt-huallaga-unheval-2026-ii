@@ -115,14 +115,14 @@ class VisionAIClient:
 
         try:
             # Respuestas estructuradas nativas de OpenAI con validación Pydantic
+            # (No enviamos temperature fija para compatibilidad con modelos como gpt-5.6-luna que solo aceptan default)
             response = self.client.beta.chat.completions.parse(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": content}
                 ],
-                response_format=AIAnalysisResult,
-                temperature=0.2
+                response_format=AIAnalysisResult
             )
             return response.choices[0].message.parsed
         except Exception as e:
