@@ -4,6 +4,7 @@
  * 
  * Se encarga de actualizar dinámicamente los elementos del DOM en respuesta
  * a los eventos recibidos vía WebSocket o consultas REST.
+ * Gestiona el toggle entre el feed de cámara en vivo y el placeholder de standby.
  */
 
 const Dashboard = {
@@ -27,16 +28,34 @@ const Dashboard = {
       }
     }
 
-    // 2. Actualizar indicador visual del estado de la cámara
+    // 2. Actualizar indicador visual del estado de la cámara y toggle del stream
     const camDot = document.querySelector('#camera-status-pill .status-dot');
     const camText = document.getElementById('camera-status-text');
+    const liveStream = document.getElementById('live-stream');
+    const placeholder = document.getElementById('video-placeholder');
+
     if (camDot && camText) {
       if (data.camera_connected) {
         camDot.className = 'status-dot green';
         camText.textContent = `Cámara: Conectada (${data.camera_source})`;
+        // Mostrar stream en vivo, ocultar placeholder
+        if (liveStream) {
+          liveStream.style.display = 'block';
+          // Refrescar src solo si estaba desconectada (evita flicker)
+          if (!liveStream.src || liveStream.src.indexOf('/api/cameras/stream') === -1) {
+            liveStream.src = '/api/cameras/stream';
+          }
+        }
+        if (placeholder) placeholder.style.display = 'none';
       } else {
         camDot.className = 'status-dot yellow';
         camText.textContent = 'Cámara: Standby';
+        // Ocultar stream, mostrar placeholder
+        if (liveStream) {
+          liveStream.style.display = 'none';
+          liveStream.src = '';
+        }
+        if (placeholder) placeholder.style.display = 'flex';
       }
     }
 
@@ -49,7 +68,7 @@ const Dashboard = {
     if (personsEl) personsEl.textContent = data.persons_detected ?? 0;
     if (fpsEl) fpsEl.textContent = `${(data.fps ?? 0).toFixed(1)} FPS`;
     if (activeEvtEl) activeEvtEl.textContent = data.active_event ? 'Sí (Capturando)' : 'No';
-    if (aiModelEl) aiModelEl.textContent = data.ai_model || 'gpt-4o';
+    if (aiModelEl) aiModelEl.textContent = data.ai_model || 'gpt-5.6-luna';
 
     // 4. Actualizar métricas del último diagnóstico de IA
     const lastTimeEl = document.getElementById('last-event-time');

@@ -87,13 +87,14 @@ class VisionAI:
         system_prompt = load_system_prompt()
 
         # Construir el payload de mensajes con las imágenes
+        image_detail = settings.IMAGE_DETAIL  # 'medium' por defecto para GPT-5.6 Luna
         content = [{"type": "text", "text": "Analiza la siguiente secuencia cronológica de fotogramas:"}]
         for idx, url in enumerate(image_data_urls):
             content.append({
                 "type": "image_url",
                 "image_url": {
                     "url": url,
-                    "detail": "low"  # 'low' detail para mayor velocidad y menor consumo de tokens
+                    "detail": image_detail
                 }
             })
 

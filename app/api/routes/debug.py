@@ -5,17 +5,25 @@ Módulo de Rutas de Diagnóstico y Pruebas Manuales (Debug REST Routes)
 Responsabilidad:
 ----------------
 Proveer endpoints auxiliares para verificar manualmente componentes aislados del sistema,
-tales como la síntesis de voz (TTS) o la reproducción física de sonido.
+tales como la síntesis de voz (TTS), la reproducción física de sonido y el análisis
+multimodal de imágenes.
 
 Endpoints:
 ----------
 - `POST /api/debug/test-speech`: Genera y reproduce un audio de prueba para verificar la salida de sonido.
+- `POST /api/debug/test-analysis`: Prueba el análisis multimodal de visión con fotogramas sintéticos o del buffer.
 """
 
+import numpy as np
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
+from typing import Optional
 from app.speech.openai_tts import OpenAISpeechService
 from app.speech.audio_output import LocalSpeakerOutput
+from app.vision.image_processor import ImageProcessor
+from app.ai.vision_client import VisionAI
+from app.events.rules import DecisionEngine
+from app.config import settings
 
 router = APIRouter(prefix="/debug")
 
@@ -28,6 +36,20 @@ class SpeechTestRequest(BaseModel):
     )
 
 
+class AnalysisTestRequest(BaseModel):
+    """Payload para solicitud de prueba de análisis de visión."""
+    use_buffer: bool = Field(
+        default=False,
+        description="Si es True, usa los fotogramas actuales del buffer. Si es False, genera frames sintéticos."
+    )
+    num_frames: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Cantidad de frames sintéticos a generar para la prueba."
+    )
+
+
 @router.post("/test-speech", summary="Ejecutar prueba de síntesis y reproducción de voz")
 def test_speech(payload: SpeechTestRequest):
     """
@@ -37,13 +59,60 @@ def test_speech(payload: SpeechTestRequest):
     service = OpenAISpeechService()
     output_path = "data/audio/test_speech.mp3"
     result = service.generate_speech(payload.text, output_path)
-    
+
     speaker = LocalSpeakerOutput()
     played = speaker.play(output_path) if result else False
-    
+
     return {
         "text": payload.text,
         "audio_generated": result is not None,
         "audio_path": result,
         "played_locally": played
+    }
+
+
+@router.post("/test-analysis", summary="Ejecutar prueba de análisis multimodal de visión")
+def test_analysis(payload: AnalysisTestRequest):
+    """
+    Ejecuta una inferencia de prueba del pipeline de análisis multimodal.
+    Puede utilizar fotogramas del buffer activo o generar frames sintéticos.
+    """
+    processor = ImageProcessor(
+        max_width=settings.IMAGE_MAX_WIDTH,
+        jpeg_quality=settings.JPEG_QUALITY
+    )
+    vision = VisionAI()
+    vision.initialize()
+    decision_engine = DecisionEngine(warning_threshold=settings.AI_WARNING_THRESHOLD)
+
+    image_urls = []
+
+    if payload.use_buffer:
+        # Intentar obtener frames del buffer del pipeline activo
+        try:
+            from app.main import pipeline_worker
+            if hasattr(pipeline_worker, '_frame_buffer'):
+                frames = pipeline_worker._frame_buffer.get_last_n_frames(payload.num_frames)
+                for ts, frame in frames:
+                    image_urls.append(processor.to_base64_data_url(frame))
+        except Exception:
+            pass
+
+    # Si no hay frames del buffer, generar frames sintéticos
+    if not image_urls:
+        for i in range(payload.num_frames):
+            fake = np.random.randint(0, 256, (720, 1280, 3), dtype=np.uint8)
+            image_urls.append(processor.to_base64_data_url(fake))
+
+    # Ejecutar análisis
+    ai_result = vision.analyze_sequence(image_urls)
+    decision = decision_engine.evaluate_decision(ai_result)
+
+    return {
+        "frames_analyzed": len(image_urls),
+        "source": "buffer" if payload.use_buffer and image_urls else "synthetic",
+        "model": settings.OPENAI_VISION_MODEL,
+        "image_detail": settings.IMAGE_DETAIL,
+        "analysis": ai_result.model_dump(),
+        "decision": decision
     }

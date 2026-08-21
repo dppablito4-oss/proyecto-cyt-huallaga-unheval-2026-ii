@@ -48,7 +48,8 @@ class Settings(BaseModel):
     # ==========================================
     # Utilizado por `app.ai.vision_client.VisionAI` para analizar secuencias de imágenes
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-    OPENAI_VISION_MODEL: str = os.getenv("OPENAI_VISION_MODEL", "gpt-4o")
+    OPENAI_VISION_MODEL: str = os.getenv("OPENAI_VISION_MODEL", "gpt-5.6-luna")
+    IMAGE_DETAIL: str = os.getenv("IMAGE_DETAIL", "medium")
 
     # Utilizado por `app.speech.openai_tts.OpenAISpeechService` para generar advertencias en audio
     OPENAI_TTS_MODEL: str = os.getenv("OPENAI_TTS_MODEL", "tts-1")

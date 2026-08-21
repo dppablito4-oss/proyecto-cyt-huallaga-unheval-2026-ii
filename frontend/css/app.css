@@ -302,9 +302,54 @@ body {
   background: rgba(56, 189, 248, 0.25);
 }
 
+.btn-success {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--accent);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-family: var(--font-family);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-success:hover {
+  background: rgba(16, 185, 129, 0.35);
+}
+
+.btn-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-family: var(--font-family);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+.btn:disabled, .btn-success:disabled, .btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-buttons {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
 .app-footer {
   text-align: center;
   font-size: 0.8rem;
   color: var(--text-muted);
   padding: 1rem 0;
 }
+

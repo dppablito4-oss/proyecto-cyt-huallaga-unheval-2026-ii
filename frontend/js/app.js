@@ -25,6 +25,51 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 3. Cargar la tabla de eventos inicial mediante petición REST
+  // 3. Botón: Iniciar pipeline de monitoreo
+  const startBtn = document.getElementById('btn-start-pipeline');
+  if (startBtn) {
+    startBtn.addEventListener('click', async () => {
+      startBtn.disabled = true;
+      startBtn.textContent = '⏳ Iniciando...';
+      const result = await API.startPipeline();
+      if (result) {
+        console.log('Pipeline:', result.message);
+      }
+      startBtn.disabled = false;
+      startBtn.textContent = '▶ Iniciar Monitoreo';
+    });
+  }
+
+  // 4. Botón: Detener pipeline de monitoreo
+  const stopBtn = document.getElementById('btn-stop-pipeline');
+  if (stopBtn) {
+    stopBtn.addEventListener('click', async () => {
+      stopBtn.disabled = true;
+      stopBtn.textContent = '⏳ Deteniendo...';
+      const result = await API.stopPipeline();
+      if (result) {
+        console.log('Pipeline:', result.message);
+      }
+      stopBtn.disabled = false;
+      stopBtn.textContent = '⏹ Detener Monitoreo';
+    });
+  }
+
+  // 5. Botón: Probar alerta de voz
+  const testSpeechBtn = document.getElementById('btn-test-speech');
+  if (testSpeechBtn) {
+    testSpeechBtn.addEventListener('click', async () => {
+      testSpeechBtn.disabled = true;
+      testSpeechBtn.textContent = '🔊 Generando...';
+      const result = await API.testSpeech();
+      if (result) {
+        console.log('TTS resultado:', result);
+      }
+      testSpeechBtn.disabled = false;
+      testSpeechBtn.textContent = '🔊 Probar Alerta';
+    });
+  }
+
+  // 6. Cargar la tabla de eventos inicial mediante petición REST
   Dashboard.renderEventsTable();
 });

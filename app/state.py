@@ -23,6 +23,9 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+from app.config import settings
+
+
 class SystemStatusModel(BaseModel):
     """
     Modelo de validación Pydantic que describe la estructura del estado
@@ -37,7 +40,7 @@ class SystemStatusModel(BaseModel):
     last_event_time: Optional[str] = Field(None, description="Marca de tiempo ISO del último evento detectado.")
     last_analysis_confidence: Optional[float] = Field(None, description="Confianza (0.0 - 1.0) de la última inferencia de IA.")
     last_warning_message: Optional[str] = Field(None, description="Último mensaje de advertencia verbal generado.")
-    ai_model: str = Field("gpt-4o", description="Nombre del modelo multimodal en uso.")
+    ai_model: str = Field(default_factory=lambda: settings.OPENAI_VISION_MODEL, description="Nombre del modelo multimodal en uso.")
     frames_per_analysis: int = Field(5, description="Número de fotogramas enviados por análisis.")
     total_events_processed: int = Field(0, description="Contador histórico de eventos analizados en la sesión.")
 
@@ -51,15 +54,15 @@ class SystemState:
     def __init__(self):
         self._running = True
         self._camera_connected = False
-        self._camera_source = "0"
+        self._camera_source = settings.CAMERA_SOURCE
         self._fps = 0.0
         self._persons_detected = 0
         self._active_event = False
         self._last_event_time: Optional[datetime] = None
         self._last_analysis_confidence: Optional[float] = None
         self._last_warning_message: Optional[str] = None
-        self._ai_model = "gpt-4o"
-        self._frames_per_analysis = 5
+        self._ai_model = settings.OPENAI_VISION_MODEL
+        self._frames_per_analysis = settings.FRAMES_PER_ANALYSIS
         self._total_events_processed = 0
 
     def to_dict(self) -> Dict[str, Any]:

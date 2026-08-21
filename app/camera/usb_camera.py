@@ -14,6 +14,7 @@ Flujo de invocación:
   en formato NumPy `ndarray` al pipeline de detección y buffer.
 """
 
+import os
 import cv2
 from typing import Tuple, Optional, Any, Dict
 from app.camera.base import CameraSource
@@ -48,7 +49,7 @@ class UsbCamera(CameraSource):
         """
         try:
             # En Windows DirectShow suele ser más rápido y confiable para cámaras USB
-            self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW if cv2.os.name == 'nt' else cv2.CAP_ANY)
+            self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW if os.name == 'nt' else cv2.CAP_ANY)
             
             # Fallback en caso de que DirectShow no esté disponible
             if not self.cap.isOpened():

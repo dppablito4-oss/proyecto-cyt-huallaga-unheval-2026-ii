@@ -71,6 +71,10 @@ class LocalDetector:
             LocalDetectionSummary: Resumen estructurado con el número de personas encontradas,
                                    la confianza máxima y los cuadros delimitadores.
         """
+        # Auto-inicialización perezosa: si el modelo no se cargó explícitamente, intentar ahora
+        if not self._initialized:
+            self.initialize()
+
         # Si el modelo no pudo inicializarse (modo fallback), devuelve resultado neutro
         if not self._initialized:
             return LocalDetectionSummary(persons=0, max_confidence=0.0, detections=[])
