@@ -1,17 +1,43 @@
+"""
+Módulo de Gestión de Cooldown Temporal (CooldownManager)
+========================================================
+
+Responsabilidad:
+----------------
+Evitar la saturación del sistema y costos innecesarios de API impidiendo que se disparen
+múltiples análisis continuos mientras una persona permanece en el campo de visión.
+
+Flujo de invocación:
+--------------------
+- Invocado por `app.events.manager.EventManager.should_trigger_event()` antes de iniciar un evento.
+- Si el tiempo transcurrido desde el último evento es menor a `settings.EVENT_COOLDOWN_SECONDS` (ej. 10 s),
+  la solicitud de análisis se bloquea temporalmente.
+"""
+
 from datetime import datetime, timedelta
 from typing import Optional
 
+
 class CooldownManager:
     """
-    Filtro temporal para evitar generar múltiples eventos duplicados o realizar
-    llamadas excesivas a la API multimodal cuando una persona permanece continuadamente en cámara.
+    Controlador de ventana de enfriamiento (Cooldown) temporal entre eventos consecutivos.
     """
 
     def __init__(self, cooldown_seconds: int = 10):
+        """
+        Args:
+            cooldown_seconds (int): Segundos mínimos que deben transcurrir entre eventos sucesivos.
+        """
         self.cooldown_seconds = cooldown_seconds
         self.last_event_time: Optional[datetime] = None
 
     def is_in_cooldown(self, current_time: Optional[datetime] = None) -> bool:
+        """
+        Determina si el sistema se encuentra en periodo de enfriamiento.
+
+        Returns:
+            bool: True si aún no ha expirado el tiempo de espera, False si está listo para un nuevo evento.
+        """
         if self.last_event_time is None:
             return False
         if current_time is None:
@@ -21,6 +47,9 @@ class CooldownManager:
         return elapsed < self.cooldown_seconds
 
     def update_last_event_time(self, event_time: Optional[datetime] = None) -> None:
+        """
+        Actualiza la marca temporal del último evento procesado.
+        """
         if event_time is None:
             event_time = datetime.now()
         self.last_event_time = event_time

@@ -1,138 +1,290 @@
-# Proyecto: Monitoreo y Evaluación de la Gestión del Recurso Hídrico en la Cuenca del Río Huallaga - Tingo María, Perú
+# Huallaga AI Monitor 🌊🤖
 
-Este proyecto de investigación aplicada tiene como objetivo implementar un sistema integral de monitoreo y evaluación de la gestión del recurso hídrico en la cuenca del río Huallaga, con énfasis en la identificación de fuentes de contaminación y la proposición de soluciones tecnológicas y de gestión sostenibles.
+**Sistema inteligente de vigilancia ambiental para la detección preventiva del arrojo de residuos sólidos en la ribera del río Huallaga**
 
-## 📋 Tabla de Contenidos
-
-- [Resumen Ejecutivo](#-resumen-ejecutivo)
-- [Justificación](#-justificación)
-- [Objetivos](#-objetivos)
-- [Metodología](#-metodología)
-- [Resultados Esperados](#-resultados-esperados)
-- [Impacto](#-impacto)
-- [Equipo de Proyecto](#-equipo-de-proyecto)
-- [Estado Actual](#-estado-actual-0)
-
-## 📝 Resumen Ejecutivo
-
-El proyecto aborda la problemática crítica de la contaminación del río Huallaga en la provincia de Leoncio Prado, Huánuco. Mediante una combinación de técnicas de **teledetección** (sensores remotos), **monitoreo in-situ** con sensores IoT y **análisis molecular** de ADN ambiental (eDNA), se busca identificar y caracterizar las principales fuentes de contaminación (agrícola, industrial, urbana) que amenazan el ecosistema y la salud humana.
-
-## 💡 Justificación
-
-La cuenca del río Huallaga es un ecosistema de gran biodiversidad y una fuente vital de agua para consumo humano, agricultura y generación hidroeléctrica. Sin embargo, enfrenta una creciente presión antropogénica que compromete su calidad ambiental y la salud de sus habitantes.
-
-### Problemática Actual:
-- **Erosión y sedimentación**: Debida a la deforestación y prácticas agrícolas inadecuadas.
-- **Vertimiento de aguas residuales**: Falta de sistemas de tratamiento en centros urbanos.
-- **Contaminación agrícola**: Uso intensivo de agroquímicos que llegan a los cuerpos de agua.
-- **Minería ilegal**: Contaminación por mercurio y otros metales pesados en zonas afluentes.
-
-La falta de datos en tiempo real y de bajo costo dificulta la toma de decisiones informadas por parte de las autoridades competentes (ANA, municipalidades, empresas de saneamiento).
-
-## 🎯 Objetivos
-
-### Objetivo General
-
-Evaluar la calidad del recurso hídrico de la cuenca del río Huallaga mediante sistemas de monitoreo de bajo costo y análisis de eDNA, para identificar fuentes de contaminación y proponer alternativas de gestión sostenible.
-
-### Objetivos Específicos
-
-1. **Caracterización del ecosistema**: Identificar la diversidad de peces y macroinvertebrados bentónicos mediante análisis de eDNA.
-2. **Monitoreo físico-químico**: Implementar sensores en puntos estratégicos (Tingo María, Castillo Grande, La Bella, etc.) para medir parámetros clave (pH, temperatura, OD, turbidez).
-3. **Análisis espacial**: Utilizar imágenes satelitales (Landsat, Sentinel) para evaluar cambios en la cobertura vegetal y calidad del agua (turbidez, clorofila).
-4. **Modelización y alerta temprana**: Desarrollar modelos hidrológicos para predecir patrones de flujo y calidad del agua.
-5. **Propuesta de gestión**: Formular recomendaciones tecnológicas y normativas para la remediación y prevención de la contaminación.
-
-## 🛠️ Metodología
-
-### Fase 1: Diagnóstico y Selección de Puntos de Muestreo
-- Revisión bibliográfica y cartográfica.
-- Delimitación de la cuenca y subcuencas.
-- selección de **10 puntos de muestreo** representativos:
-    - Aguas arriba (zonas boscosas).
-    - Puntos de vertimiento (desagües, acequias agrícolas).
-    - Puntos de captación de agua para consumo.
-    - Aguas abajo (zona de Tingo María).
-
-### Fase 2: Monitoreo In-Situ (IoT)
-**Tecnología**: Sensores de bajo costo (Grove, Atlas Scientific) conectados a ESP32/Raspberry Pi.
-**Parámetros**: pH, temperatura, oxígeno disuelto (OD), conductividad, turbidez, potencial redox (ORP).
-**Frecuencia**: Cada 15 minutos.
-**Alimentación**: Paneles solares y baterías.
-
-### Fase 3: Teledetección
-**Satélites**: Landsat 8/9, Sentinel-2, Sentinel-3.
-**Software**: QGIS, Google Earth Engine.
-**Análisis**: Índices de vegetación (NDVI), turbidez, clorofila.
-
-### Fase 4: Análisis Molecular (eDNA)
-**Muestreo**: 1 L de agua por punto.
-**Extracción**: Kits comerciales.
-**PCR**: Reactivos específicos para peces y macroinvertebrados.
-**Secuenciación**: Illumine NovaSeq/MiniSeq.
-**Bioinformática**: QIIME2, Kraken2, MEGAN6.
-
-### Fase 5: Integración y Modelización
-**Plataforma**: Google Cloud Platform (BigQuery, Data Studio).
-**Modelos**: Regresión múltiple, Series de tiempo (ARIMA), Machine Learning.
-
-## 🎁 Resultados Esperados
-
-1. **Mapa de riesgo de contaminación**: Detallando zonas vulnerables y fuentes de emisión.
-2. **Base de datos en tiempo real**: Dashboard interactivo con datos de los sensores.
-3. **Inventario de biodiversidad**: Listado taxonómico de especies acuáticas presentes.
-4. **Informe técnico-científico**: Con análisis estadísticos y propuestas de mitigación.
-5. **Modelo predictivo**: Para alerta temprana de eventos de contaminación.
-
-## 🌎 Impacto
-
-### Ambiental
-- Mejora en la gestión de recursos hídricos.
-- Protección de la biodiversidad acuática.
-- Prevención de la contaminación de fuentes de agua.
-
-### Social
-- Mejora de la salud pública (agua más segura).
-- Capacitación a comunidades locales en monitoreo ambiental.
-- Concientización ciudadana.
-
-### Económico
-- Reducción de costos de monitoreo a largo plazo.
-- Promoción del turismo sostenible (Río활동).
-- Mejora de la competitividad agrícola (agua de mejor calidad).
-
-## 👥 Equipo de Proyecto
-
-| Rol | Nombre | Afiliación | Contacto |
-| :--- | :--- | :--- | :--- |
-| **Coordinador General** | [Nombre] | [Afiliación] | [Email] |
-| **Investigador Principal** | [Nombre] | [Afiliación] | [Email] |
-| **Especialista IoT** | [Nombre] | [Afiliación] | [Email] |
-| **Biólogo Molecular** | [Nombre] | [Afiliación] | [Email] |
-| **GIS Specialist** | [Nombre] | [Afiliación] | [Email] |
-| **Asesoría Legal/Normativa** | [Nombre] | [Afiliación] | [Email] |
-
-*(Nota: Los nombres deben ser completados con los integrantes reales del proyecto.)*
-
-## 📊 Estado Actual (0)
-
-El proyecto se encuentra en fase de **Conceptualización y Diseño**. Las actividades realizadas hasta la fecha son:
-
-- [ ] Definición del problema y objetivos.
-- [ ] Revisión bibliográfica preliminar.
-- [ ] Selección de tecnología (sensores IoT, satélites).
-- [ ] Propuesta inicial de puntos de muestreo.
-- [ ] Contacto con instituciones aliadas (ANA, Municipalidad, UNHEVAL).
-
-**Próximos pasos:**
-- [ ] Obtener permisos de muestreo.
-- [ ] Adquisición de equipos.
-- [ ] Instalación del primer prototipo de sensor.
+*Proyecto de Investigación Aplicada en Ciencia y Tecnología (CyT) — Universidad Nacional Hermilio Valdizán (UNHEVAL), Huánuco, Perú (2026-II).*
 
 ---
 
-**Repositorio:** [Link al Repositorio](https://github.com/tu_usuario/proyecto-cyt-huallaga-unheval-2026-ii)
-**Contacto:** [Correo de contacto]
-**Financiador:** [Nombre de la entidad financiadora]
+## 📌 Resumen del Proyecto
 
-*Este documento es una plantilla y debe ser actualizado con los detalles específicos del proyecto en ejecución.*
+El río Huallaga en la provincia de Leoncio Prado (Tingo María, Huánuco) constituye un ecosistema fluvial estratégico de gran biodiversidad y fuente vital de agua para consumo, agricultura y desarrollo comunitario. Sin embargo, enfrenta una creciente amenaza por vertimientos clandestinos y el arrojo indebido de residuos sólidos (botellas plásticas, bolsas y empaques) en sus riberas.
+
+**Huallaga AI Monitor** es un sistema modular de computación en el borde (Edge Computing) e Inteligencia Artificial Multimodal diseñado para:
+
+1. **Adquirir video continuo** desde cámaras USB, cámaras IP/RTSP o grabaciones pregrabadas.
+2. **Detectar personas localmente** mediante modelos ligeros de Ultralytics YOLO (`yolov8n`), actuando como un filtro económico de bajo costo computacional.
+3. **Mantener un buffer temporal en memoria RAM** con los últimos segundos de video para conservar el contexto cronológico del evento.
+4. **Seleccionar y comprimir fotogramas representativos** optimizando el consumo de ancho de banda y latencia.
+5. **Analizar la secuencia mediante IA Multimodal** (OpenAI Vision) para clasificar con precisión conductas de abandono o arrojo de basura frente a actividades habituales.
+6. **Emitir advertencias sonoras preventivas en tiempo real** mediante Text-to-Speech (OpenAI TTS) y altavoces locales/IP.
+7. **Visualizar y registrar métricas académicas** en tiempo real a través de un Dashboard Web interactivo y una base de datos local SQLite.
+
+---
+
+## 🏗️ Arquitectura del Sistema
+
+```
+                    CÁMARA (USB / RTSP / Video)
+                               │
+                               ▼
+                         CameraSource
+                               │
+                   OpenCV (Flujo de Frames)
+                               │
+         ┌─────────────────────┴─────────────────────┐
+         ▼                                           ▼
+   LocalDetector (YOLO)                     FrameBuffer (5s RAM)
+(¿Hay personas presentes?)               (Contexto temporal previo)
+         │                                           │
+         └─────────────────────┬─────────────────────┘
+                               │
+                               ▼
+                          EventManager
+                     (Cooldown & Trigger)
+                               │
+                               ▼
+                         FrameSelector
+                    (3 / 5 / 8 frames clave)
+                               │
+                               ▼
+                        ImageProcessor
+                 (Resize 1280w + JPEG 70 + B64)
+                               │
+                               ▼
+                           VisionAI
+                 (OpenAI Multimodal / GPT-4o)
+                               │
+                               ▼
+                       AIAnalysisResult
+                    (JSON con tipado estricto)
+                               │
+                               ▼
+                        DecisionEngine
+                   ┌───────────┴───────────┐
+                   ▼                       ▼
+            IGNORE / LOG_ONLY             WARN
+             (Auditar en DB)               │
+                                           ▼
+                                     SpeechService
+                                    (OpenAI TTS-1)
+                                           │
+                                           ▼
+                                      AudioOutput
+                                  (🔊 Altavoz Local)
+```
+
+En paralelo, el estado global (`SystemState`) se sincroniza en tiempo real con el **Frontend Dashboard** a través de **FastAPI** y **WebSockets**.
+
+---
+
+## 📂 Estructura del Repositorio
+
+```text
+huallaga-ai-monitor/
+│
+├── app/                              # Paquete principal del Backend (FastAPI & Visión)
+│   ├── main.py                       # Punto de entrada FastAPI y servidor estático
+│   ├── config.py                     # Configuración centralizada (.env)
+│   ├── state.py                      # Estado global del sistema (SystemState)
+│   ├── dependencies.py               # Inyección de dependencias FastAPI
+│   │
+│   ├── models/                       # Modelos de datos Pydantic
+│   │   ├── event.py                  # Entidad EventModel y detecciones
+│   │   ├── analysis.py               # Esquema de respuesta de IA (AIAnalysisResult)
+│   │   ├── camera.py                 # Estado de cámara
+│   │   └── metrics.py                # Métricas de latencia y payload
+│   │
+│   ├── camera/                       # Módulo de Adquisición de Video
+│   │   ├── base.py                   # Interfaz abstracta CameraSource
+│   │   ├── usb_camera.py             # Implementación para webcam USB
+│   │   ├── rtsp_camera.py            # Placeholder para cámaras IP / RTSP
+│   │   └── video_file.py             # Reproducción de videos de prueba (.mp4)
+│   │
+│   ├── vision/                       # Procesamiento de Visión por Computadora
+│   │   ├── detector.py               # Detector YOLO local (filtro económico)
+│   │   ├── tracker.py                # Interfaz de seguimiento de objetos
+│   │   ├── frame_buffer.py           # Buffer circular temporal en RAM (deque)
+│   │   ├── frame_selector.py         # Muestreo temporal uniforme de frames
+│   │   └── image_processor.py        # Redimensionamiento, JPEG y Base64
+│   │
+│   ├── events/                       # Gestión de Eventos y Reglas de Negocio
+│   │   ├── manager.py                # Gestor del ciclo de vida del evento
+│   │   ├── cooldown.py               # Filtro temporal para evitar duplicados
+│   │   └── rules.py                  # DecisionEngine (IGNORE / LOG_ONLY / WARN)
+│   │
+│   ├── ai/                           # Integración con IA Multimodal
+│   │   ├── vision_client.py          # Cliente OpenAI Vision (con modo mock)
+│   │   ├── schemas.py                # Re-export de esquemas de inferencia
+│   │   ├── prompts.py                # Cargador dinámico de prompts
+│   │   └── model_config.py           # Hiperparámetros de muestreo
+│   │
+│   ├── speech/                       # Síntesis y Reproducción de Audio
+│   │   ├── service.py                # Interfaz abstracta SpeechService
+│   │   ├── openai_tts.py             # Síntesis con OpenAI TTS (/v1/audio/speech)
+│   │   └── audio_output.py           # Reproducción en altavoces locales
+│   │
+│   ├── storage/                      # Capa de Persistencia
+│   │   ├── events_repository.py      # Interfaz abstracta de repositorio
+│   │   └── local_repository.py       # Persistencia en SQLite local (data/events.db)
+│   │
+│   ├── metrics/                      # Recolección de Métricas Experimentales
+│   │   ├── collector.py              # Agregador de métricas
+│   │   ├── latency.py                # Cronómetro de alta resolución (LatencyTimer)
+│   │   └── network.py                # Cálculo de tamaño de payloads
+│   │
+│   ├── utils/                        # Utilidades auxiliares (IDs, tiempo, archivos)
+│   │   ├── ids.py
+│   │   ├── time.py
+│   │   └── files.py
+│   │
+│   └── api/                          # Endpoints REST y WebSockets
+│       ├── routes/
+│       │   ├── status.py             # GET /api/status y GET /api/health
+│       │   ├── events.py             # GET /api/events y GET /api/events/{id}
+│       │   ├── cameras.py            # GET /api/cameras/status
+│       │   ├── config.py             # GET & PATCH /api/config
+│       │   └── debug.py              # POST /api/debug/test-speech
+│       └── websocket.py              # WS /ws para sincronización reactiva
+│
+├── frontend/                         # Dashboard Web (Vanilla HTML/CSS/JS)
+│   ├── index.html                    # Estructura de la interfaz
+│   ├── css/
+│   │   └── app.css                   # Estilos modernos dark-mode glassmorphic
+│   └── js/
+│       ├── api.js                    # Cliente HTTP REST
+│       ├── websocket.js              # Cliente WebSocket con autoreconexión
+│       ├── dashboard.js              # Actualización dinámica del DOM
+│       └── app.js                    # Inicializador de la aplicación web
+│
+├── prompts/                          # Prompts especializados externos
+│   └── environmental_event.txt       # Prompt de análisis cronológico de visión
+│
+├── docs/                             # Documentación técnica extendida
+│   └── ARQUITECTURA_DETALLADA.md     # Especificación técnica exhaustiva
+│
+├── data/                             # Almacenamiento local (ignorado en git)
+│   ├── events/                       # Metadatos de eventos
+│   ├── frames/                       # Capturas de imágenes guardadas
+│   ├── audio/                        # Archivos de audio generados
+│   └── test_videos/                  # Videos para pruebas controladas
+│
+├── tests/                            # Pruebas Unitarias
+│   ├── test_frame_selector.py
+│   ├── test_image_processor.py
+│   ├── test_ai_schema.py
+│   └── test_event_manager.py
+│
+├── scripts/                          # Scripts de Prueba y Benchmarking
+│   ├── test_camera.py                # Verificación de cámara USB
+│   ├── test_yolo.py                  # Verificación de detección YOLO
+│   ├── test_openai.py                # Verificación de cliente Vision AI
+│   └── benchmark_images.py           # Benchmark de compresión de imágenes
+│
+├── .env.example                      # Plantilla de variables de entorno
+├── .gitignore                        # Reglas de exclusión de git
+├── requirements.txt                  # Dependencias de Python
+├── pyproject.toml                    # Metadatos del proyecto Python
+└── README.md                         # Documentación general del repositorio
+```
+
+---
+
+## ⚙️ Instalación y Configuración
+
+### 1. Clonar el repositorio
+```bash
+git clone https://github.com/dppablito4-oss/proyecto-cyt-huallaga-unheval-2026-ii.git
+cd proyecto-cyt-huallaga-unheval-2026-ii
+```
+
+### 2. Crear entorno virtual e instalar dependencias
+```bash
+python -m venv .venv
+# En Windows:
+.venv\Scripts\activate
+# En Linux/macOS:
+source .venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+### 3. Configurar variables de entorno
+Copia la plantilla `.env.example` a `.env`:
+```bash
+cp .env.example .env
+```
+Edita `.env` y configura tu clave de OpenAI si deseas inferencia real:
+```env
+OPENAI_API_KEY=sk-tu-api-key-aqui
+OPENAI_VISION_MODEL=gpt-4o
+OPENAI_TTS_MODEL=tts-1
+OPENAI_TTS_VOICE=alloy
+CAMERA_SOURCE=0
+YOLO_MODEL=yolov8n.pt
+```
+> [!NOTE]
+> El sistema arranca y funciona perfectamente en **Modo Simulación (Fase 0)** incluso sin configurar una API Key ni tener una cámara conectada.
+
+---
+
+## 🚀 Ejecución del Servidor
+
+Inicia el servidor backend y el dashboard web con Uvicorn:
+```bash
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Abre tu navegador en:
+👉 **`http://127.0.0.1:8000`**
+
+---
+
+## 🧪 Ejecución de Pruebas Unitarias y Benchmarks
+
+### Pruebas Unitarias:
+```bash
+python tests/test_frame_selector.py
+python tests/test_image_processor.py
+python tests/test_ai_schema.py
+python tests/test_event_manager.py
+```
+
+### Scripts de Diagnóstico y Benchmark:
+```bash
+python scripts/test_yolo.py
+python scripts/test_openai.py
+python scripts/benchmark_images.py
+```
+
+---
+
+## 📡 Endpoints de la API REST
+
+| Método | Endpoint | Descripción |
+| :--- | :--- | :--- |
+| `GET` | `/api/status` | Retorna el estado operativo completo del sistema en JSON. |
+| `GET` | `/api/health` | Sonda de salud y disponibilidad (Health Check). |
+| `GET` | `/api/events` | Lista los eventos históricos registrados en SQLite. |
+| `GET` | `/api/events/{id}` | Retorna el detalle completo de un evento por su UUID. |
+| `GET` | `/api/cameras/status` | Consulta la resolución y estado de enlace de la cámara. |
+| `GET` | `/api/config` | Consulta los parámetros operacionales activos no sensibles. |
+| `PATCH` | `/api/config` | Modifica en caliente parámetros (frames, calidad JPEG, umbrales). |
+| `POST` | `/api/debug/test-speech` | Prueba manual de síntesis y reproducción de voz TTS. |
+| `WS` | `/ws` | Canal WebSocket para actualizaciones reactivas en tiempo real. |
+
+---
+
+## 🛡️ Principios Éticos y Privacidad
+
+- **Vigilancia Ambiental, NO Reconocimiento Facial:** El sistema está diseñado exclusivamente para evaluar conductas de contaminación y objetos.
+- **Sin datos biométricos:** No se almacenan nombres, documentos de identidad (DNI) ni perfiles de personas.
+- **Transparencia Académica:** Todo el código y métricas experimentales son reproducibles con fines de investigación científica.
+
+---
+
+## 👥 Equipo de Investigación y Créditos
+
+- **Institución:** Universidad Nacional Hermilio Valdizán (UNHEVAL) — Huánuco, Perú.
+- **Proyecto:** CyT Huallaga 2026-II.
+- **Repositorio:** [github.com/dppablito4-oss/proyecto-cyt-huallaga-unheval-2026-ii](https://github.com/dppablito4-oss/proyecto-cyt-huallaga-unheval-2026-ii)

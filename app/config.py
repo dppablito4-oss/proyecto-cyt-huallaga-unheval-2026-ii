@@ -1,14 +1,41 @@
+"""
+Módulo de Configuración Global del Sistema (Huallaga AI Monitor)
+===============================================================
+
+Responsabilidad:
+----------------
+Centralizar la carga, validación y acceso a todas las variables de entorno
+y parámetros operativos del prototipo de vigilancia ambiental.
+
+Flujo de invocación:
+--------------------
+- Se ejecuta al inicio de la aplicación y es importado por `app.dependencies`, `app.ai.vision_client`,
+  `app.speech.openai_tts`, `app.api.routes.config` y el punto de entrada `app.main`.
+- Lee las variables desde el archivo `.env` en la raíz del proyecto.
+"""
+
 import os
 from pathlib import Path
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# Load .env if present
+# Ruta absoluta al archivo .env ubicado en la raíz del proyecto
 env_path = Path(__file__).resolve().parent.parent / ".env"
+
+# Cargar las variables de entorno definidas en el archivo .env al entorno de Python
 load_dotenv(dotenv_path=env_path)
 
+
 class Settings(BaseModel):
-    # App General
+    """
+    Clase contenedora de la configuración global del sistema validada con Pydantic.
+    Proporciona valores predeterminados seguros para permitir que el prototipo
+    arranque incluso si no se dispone de un archivo .env configurado.
+    """
+
+    # ==========================================
+    # 1. Configuración General de la Aplicación
+    # ==========================================
     APP_NAME: str = "Huallaga AI Monitor"
     APP_VERSION: str = "0.1.0"
     APP_ENV: str = os.getenv("APP_ENV", "development")
@@ -16,39 +43,67 @@ class Settings(BaseModel):
     HOST: str = os.getenv("HOST", "127.0.0.1")
     PORT: int = int(os.getenv("PORT", "8000"))
 
-    # OpenAI Configuration
+    # ==========================================
+    # 2. Configuración de OpenAI (Visión y TTS)
+    # ==========================================
+    # Utilizado por `app.ai.vision_client.VisionAI` para analizar secuencias de imágenes
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     OPENAI_VISION_MODEL: str = os.getenv("OPENAI_VISION_MODEL", "gpt-4o")
+
+    # Utilizado por `app.speech.openai_tts.OpenAISpeechService` para generar advertencias en audio
     OPENAI_TTS_MODEL: str = os.getenv("OPENAI_TTS_MODEL", "tts-1")
     OPENAI_TTS_VOICE: str = os.getenv("OPENAI_TTS_VOICE", "alloy")
 
-    # Camera Options
+    # ==========================================
+    # 3. Adquisición de Video (Cámara / Stream)
+    # ==========================================
+    # Fuente de captura: número entero "0", "1" (webcam) o URL RTSP "rtsp://..."
+    # Utilizado por `app.camera.usb_camera.UsbCamera` y `app.camera.rtsp_camera.RtspCamera`
     CAMERA_SOURCE: str = os.getenv("CAMERA_SOURCE", "0")
     CAMERA_FPS: int = int(os.getenv("CAMERA_FPS", "30"))
     CAMERA_WIDTH: int = int(os.getenv("CAMERA_WIDTH", "1280"))
     CAMERA_HEIGHT: int = int(os.getenv("CAMERA_HEIGHT", "720"))
 
-    # YOLO Detector
+    # ==========================================
+    # 4. Detector Local de Personas (YOLO)
+    # ==========================================
+    # Utilizado por `app.vision.detector.LocalDetector` como filtro de bajo costo
     YOLO_MODEL: str = os.getenv("YOLO_MODEL", "yolov8n.pt")
     YOLO_PERSON_CONFIDENCE: float = float(os.getenv("YOLO_PERSON_CONFIDENCE", "0.50"))
 
-    # Buffer & Event Management
+    # ==========================================
+    # 5. Buffer Circular y Gestión de Eventos
+    # ==========================================
+    # BUFFER_SECONDS: Tiempo en segundos de video mantenido en RAM por `app.vision.frame_buffer.FrameBuffer`
     BUFFER_SECONDS: int = int(os.getenv("BUFFER_SECONDS", "5"))
+    # EVENT_CAPTURE_SECONDS: Ventana temporal a recolectar cuando ocurre un evento
     EVENT_CAPTURE_SECONDS: int = int(os.getenv("EVENT_CAPTURE_SECONDS", "3"))
+    # EVENT_COOLDOWN_SECONDS: Tiempo de espera en `app.events.cooldown.CooldownManager` para evitar llamadas repetidas
     EVENT_COOLDOWN_SECONDS: int = int(os.getenv("EVENT_COOLDOWN_SECONDS", "10"))
 
-    # Frame Processing
+    # ==========================================
+    # 6. Procesamiento y Selección de Imágenes
+    # ==========================================
+    # FRAMES_PER_ANALYSIS: Cantidad de imágenes que `app.vision.frame_selector.FrameSelector` extraerá
     FRAMES_PER_ANALYSIS: int = int(os.getenv("FRAMES_PER_ANALYSIS", "5"))
+    # Dimensiones y calidad de compresión utilizadas por `app.vision.image_processor.ImageProcessor`
     IMAGE_MAX_WIDTH: int = int(os.getenv("IMAGE_MAX_WIDTH", "1280"))
     JPEG_QUALITY: int = int(os.getenv("JPEG_QUALITY", "70"))
 
-    # Decision Engine
+    # ==========================================
+    # 7. Motor de Decisiones (Decision Engine)
+    # ==========================================
+    # Umbral mínimo de confianza para que `app.events.rules.DecisionEngine` active advertencia por voz
     AI_WARNING_THRESHOLD: float = float(os.getenv("AI_WARNING_THRESHOLD", "0.80"))
 
-    # Paths
+    # ==========================================
+    # 8. Rutas del Sistema de Archivos
+    # ==========================================
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     DATA_DIR: Path = BASE_DIR / "data"
     PROMPTS_DIR: Path = BASE_DIR / "prompts"
     FRONTEND_DIR: Path = BASE_DIR / "frontend"
 
+
+# Instancia única (Singleton) para ser consumida por todo el proyecto
 settings = Settings()

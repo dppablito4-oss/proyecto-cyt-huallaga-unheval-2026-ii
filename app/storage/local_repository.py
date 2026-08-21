@@ -1,3 +1,19 @@
+"""
+Módulo de Repositorio Local en SQLite (SQLiteEventsRepository)
+==============================================================
+
+Responsabilidad:
+----------------
+Proveer persistencia local ligera, confiable y sin dependencias de red o servicios en la nube
+utilizando SQLite (`data/events.db`).
+
+Flujo de invocación:
+--------------------
+- Crea automáticamente la tabla `events` en el arranque de la aplicación si no existe.
+- Guarda el estado completo de cada evento serializado en formato JSON (`EventModel.model_dump_json()`).
+- Es consultado por los endpoints REST `GET /api/events` y `GET /api/events/{id}` en `app.api.routes.events`.
+"""
+
 import sqlite3
 import json
 import logging
@@ -9,23 +25,29 @@ from app.storage.events_repository import EventsRepository
 
 logger = logging.getLogger(__name__)
 
+
 class SQLiteEventsRepository(EventsRepository):
     """
-    Implementación de repositorio basada en SQLite local.
-    Proporciona almacenamiento portátil y sin dependencias cloud para la Fase 0.
+    Implementación concreta de persistencia en base de datos SQLite integrada.
     """
 
     def __init__(self, db_path: str = "data/events.db"):
+        """
+        Args:
+            db_path (str): Ruta al archivo de base de datos local SQLite.
+        """
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:
+        """Crea una conexión con row_factory para acceso por nombre de columna."""
         conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
         return conn
 
     def _init_db(self) -> None:
+        """Crea el esquema de base de datos relacional si aún no está presente."""
         try:
             with self._get_connection() as conn:
                 conn.execute("""
@@ -43,6 +65,9 @@ class SQLiteEventsRepository(EventsRepository):
             logger.error(f"Error al inicializar base de datos SQLite: {e}")
 
     def save(self, event: EventModel) -> bool:
+        """
+        Inserta o actualiza un registro de evento en la tabla `events`.
+        """
         try:
             with self._get_connection() as conn:
                 conn.execute(
@@ -66,6 +91,9 @@ class SQLiteEventsRepository(EventsRepository):
             return False
 
     def get_by_id(self, event_id: str) -> Optional[EventModel]:
+        """
+        Busca un evento por su ID primario y deserializa el JSON a `EventModel`.
+        """
         try:
             with self._get_connection() as conn:
                 cursor = conn.execute("SELECT data_json FROM events WHERE id = ?", (event_id,))
@@ -74,14 +102,17 @@ class SQLiteEventsRepository(EventsRepository):
                     return EventModel.model_validate_json(row["data_json"])
                 return None
         except Exception as e:
-            logger.error(f"Error leyendo evento {event_id} de SQLite: {e}")
+            logger.error(f"Error recuperando evento {event_id} de SQLite: {e}")
             return None
 
     def list_recent(self, limit: int = 20) -> List[EventModel]:
+        """
+        Recupera los últimos $limit$ eventos ordenados cronológicamente desde el más reciente.
+        """
         try:
             with self._get_connection() as conn:
                 cursor = conn.execute(
-                    "SELECT data_json FROM events ORDER OR BY started_at DESC LIMIT ?", (limit,)
+                    "SELECT data_json FROM events ORDER BY started_at DESC LIMIT ?", (limit,)
                 )
                 rows = cursor.fetchall()
                 events = []
@@ -92,13 +123,5 @@ class SQLiteEventsRepository(EventsRepository):
                         pass
                 return events
         except Exception as e:
-            # Fix fallback query syntax if needed
-            try:
-                with self._get_connection() as conn:
-                    cursor = conn.execute(
-                        "SELECT data_json FROM events ORDER BY started_at DESC LIMIT ?", (limit,)
-                    )
-                    return [EventModel.model_validate_json(r["data_json"]) for r in cursor.fetchall()]
-            except Exception as ex:
-                logger.error(f"Error consultando eventos recientes en SQLite: {ex}")
-                return []
+            logger.error(f"Error consultando eventos recientes en SQLite: {e}")
+            return []
