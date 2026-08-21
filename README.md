@@ -1,4 +1,4 @@
-# Huallaga AI Monitor 🌊🤖
+# Huallaga AI Monitor
 
 **Sistema inteligente de vigilancia ambiental para la detección preventiva del arrojo de residuos sólidos en la ribera del río Huallaga**
 
@@ -6,7 +6,7 @@
 
 ---
 
-## 📌 Contexto y Justificación Científica
+## Contexto y Justificación Científica
 
 El río Huallaga a su paso por el área metropolitana de **Huánuco, Amarilis y Pillco Marca** enfrenta una severa crisis por contaminación y acumulación recurrente de residuos sólidos. Informes oficiales de entidades como el OEFA, FEMA y la UNHEVAL han documentado hasta **216 puntos críticos** a lo largo de su cuenca regional, con una generación diaria de entre **100 y 120 toneladas de residuos**.
 
@@ -16,11 +16,11 @@ Las estrategias tradicionales basadas en campañas de limpieza periódicas son v
 
 ---
 
-## 🎯 Delimitación del Alcance
+##  Delimitación del Alcance
 
 | Fuente de Contaminación | Descripción | Alcance en Huallaga AI Monitor |
 | :--- | :--- | :--- |
-| **1. Disposición directa por personas (*Littering*)** | Arrojo intencional o negligente de botellas, bolsas y envoltorios por peatones y conductores. | **🎯 ENFOQUE EXCLUSIVO DEL SISTEMA.** |
+| **1. Disposición directa por personas (*Littering*)** | Arrojo intencional o negligente de botellas, bolsas y envoltorios por peatones y conductores. | ** ENFOQUE EXCLUSIVO DEL SISTEMA.** |
 | **2. Residuos transportados por la corriente** | Basura arrastrada desde cuencas altas por lluvia y caudal. | Fuera de alcance (requiere dragado/infraestructura). |
 | **3. Vertimientos de aguas residuales** | Efluentes domésticos o industriales (ej. Camal Municipal). | Fuera de alcance (requiere plantas PTAR). |
 | **4. Escombros masivos de construcción** | Descargas clandestinas nocturnas con volquetes pesados. | Fuera de alcance inicial. |
@@ -28,7 +28,7 @@ Las estrategias tradicionales basadas en campañas de limpieza periódicas son v
 
 ---
 
-## 🏗️ Arquitectura del Sistema (Edge Computing & Multimodal AI)
+##  Arquitectura del Sistema (Edge Computing & Multimodal AI)
 
 ```text
                     CÁMARA (USB / RTSP / Video)
@@ -84,7 +84,7 @@ En paralelo, el estado global (`SystemState`) se difunde reactivamente al **Dash
 
 ---
 
-## 📂 Estructura del Repositorio
+##  Estructura del Repositorio
 
 ```text
 huallaga-ai-monitor/
@@ -196,7 +196,7 @@ huallaga-ai-monitor/
 
 ---
 
-## ⚙️ Instalación y Configuración
+##  Instalación y Configuración
 
 ### 1. Clonar el repositorio
 ```bash
@@ -234,7 +234,7 @@ YOLO_MODEL=yolov8n.pt
 
 ---
 
-## 🚀 Puesta en Marcha
+## Puesta en Marcha
 
 Inicia el servidor backend y dashboard con Uvicorn:
 ```bash
@@ -246,7 +246,7 @@ Accede al dashboard en tu navegador:
 
 ---
 
-## 🧪 Pruebas Unitarias y Diagnóstico
+##  Pruebas Unitarias y Diagnóstico
 
 ### Pruebas de Módulos:
 ```bash
@@ -265,7 +265,7 @@ python scripts/benchmark_images.py
 
 ---
 
-## 📡 Endpoints de la API REST
+##  Endpoints de la API REST
 
 | Método | Endpoint | Descripción |
 | :--- | :--- | :--- |
@@ -281,7 +281,7 @@ python scripts/benchmark_images.py
 
 ---
 
-## 🛡️ Marco Ético y Protección de Datos Personales
+##  Marco Ético y Protección de Datos Personales
 
 El diseño del sistema cumple estrictamente con el marco legal peruano (**Ley N° 29733 de Protección de Datos Personales**, **Ley N° 30120** y la **Directiva N° 01-2020-JUS/DGTAIPD**):
 - **Anonimización por Diseño (*Privacy by Design*):** El sistema analiza siluetas y conductas físicas de arrojo de objetos, **SIN utilizar reconocimiento facial ni identificación biométrica**.
@@ -290,7 +290,7 @@ El diseño del sistema cumple estrictamente con el marco legal peruano (**Ley N�
 
 ---
 
-## 👥 Equipo y Créditos
+##  Equipo y Créditos
 
 - **Institución:** Universidad Nacional Hermilio Valdizán (UNHEVAL) — Huánuco, Perú.
 - **Proyecto:** CyT Huallaga 2026-II.
