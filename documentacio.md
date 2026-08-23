@@ -8,6 +8,18 @@ Versión inicial:
 
 ---
 
+## Estado y alcance de este documento
+
+Este archivo combina la especificación original con la hoja de ruta del proyecto. No todas las capacidades descritas se consideran terminadas.
+
+**Implementado actualmente:** cámara USB/RTSP/video, YOLO para personas, buffer temporal muestreado, selección y compresión de frames, análisis multimodal estructurado, decisión, TTS, SQLite, API, WebSocket y dashboard. La captura y el análisis se ejecutan en hilos separados para evitar congelar el video, con un solo evento activo a la vez.
+
+**Previsto para fases posteriores:** métricas experimentales completas, conjunto de videos etiquetados, tracking, pose, segmentación, reconexión robusta, autenticación, configuración totalmente dinámica y soporte escalable para múltiples cámaras.
+
+El buffer actual conserva por defecto 5 muestras por segundo durante 5 segundos. Esto limita el uso aproximado de frames crudos a 25 imágenes, aunque la cámara opere a una tasa mayor.
+
+---
+
 # 2. Objetivo técnico del sistema
 
 Construir un sistema modular capaz de:
@@ -25,7 +37,7 @@ Construir un sistema modular capaz de:
 11. convertir el texto a voz;
 12. reproducir el audio;
 13. mostrar todo el estado del sistema mediante una interfaz web;
-14. registrar métricas para posteriores experimentos.
+14. preparar y, en una fase posterior, registrar métricas completas para los experimentos.
 
 El prototipo debe diseñarse de manera que posteriormente la webcam pueda reemplazarse por cámaras IP/RTSP sin modificar la lógica principal.
 
@@ -1493,19 +1505,19 @@ web server
 
 La captura de cámara NO puede congelarse mientras la API tarda varios segundos.
 
-Arquitectura sugerida:
+Arquitectura implementada en el prototipo actual:
 
 ```text
-Camera Worker
-      ↓
- Event Queue
-      ↓
-Analysis Worker
+Camera Worker ── actualiza FrameBuffer continuamente
+      │
+      └── Event Analysis Thread (máximo uno activo)
+
+FastAPI / WebSocket continúan de forma independiente
 ```
 
-FastAPI continúa funcionando independientemente.
+El evento se crea antes de iniciar el hilo de análisis. Durante `EVENT_CAPTURE_SECONDS`, el hilo espera mientras el Camera Worker sigue incorporando frames al buffer; así se obtiene contexto anterior y posterior sin congelar el stream. El acceso al buffer está protegido para lectura y escritura concurrentes.
 
-Primera versión puede utilizar:
+Para una etapa con múltiples cámaras o mayor volumen se podrá migrar a:
 
 ```text
 threading
@@ -1520,18 +1532,18 @@ asyncio
 
 pero no mezclar ambos indiscriminadamente.
 
-Preferencia inicial:
+Estado actual y evolución prevista:
 
-- captura OpenCV en thread;
-- cola thread-safe;
+- captura OpenCV en un hilo dedicado;
+- análisis en un segundo hilo con `MAX_CONCURRENT_ANALYSES=1`;
 - API FastAPI async;
-- análisis ejecutado por worker.
+- cola thread-safe reservada para una fase de escalamiento.
 
 ---
 
-# 41. Cola de eventos
+# 41. Cola de eventos futura
 
-Utilizar una cola.
+La versión actual no necesita una cola porque bloquea nuevos disparos mientras existe un evento activo. Cuando se incorporen varias cámaras o análisis simultáneos, se utilizará una cola.
 
 Ejemplo:
 
@@ -1539,7 +1551,7 @@ Ejemplo:
 EventQueue
 ```
 
-Evita ejecutar simultáneamente cinco análisis porque aparecen cinco personas.
+La cola futura evitará ejecutar simultáneamente varios análisis cuando aparezcan múltiples personas o cámaras.
 
 Primera versión:
 

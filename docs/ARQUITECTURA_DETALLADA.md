@@ -5,6 +5,14 @@
 
 ---
 
+## Estado de implementación
+
+La versión actual es un prototipo experimental local. La captura de cámara, YOLO, buffer temporal, análisis multimodal, decisión, TTS, SQLite y dashboard están integrados. La cámara permanece activa en un hilo mientras un segundo hilo procesa como máximo un evento, evitando congelar el video durante la espera de contexto o las llamadas externas.
+
+El buffer conserva por defecto 5 muestras por segundo durante 5 segundos, en lugar de almacenar los 30 FPS completos. Las clases de métricas, tracking y otras extensiones están preparadas, pero su integración y validación científica pertenecen a fases posteriores.
+
+---
+
 ## 1. Fundamento y Contexto del Proyecto
 
 ### 1.1. Delimitación Geográfica del Área de Estudio
@@ -78,20 +86,20 @@ flowchart TD
     end
 
     subgraph Capa_Borde ["2. Procesamiento Local en Borde (Edge AI)"]
-        CAM -->|Flujo de Frames 30 FPS| FB[FrameBuffer: 5s en RAM - deque]
+        CAM -->|Muestreo configurable: 5 FPS| FB[FrameBuffer: 5s en RAM - deque]
         CAM -->|Frame ndarray| YOLO[LocalDetector: Ultralytics YOLOv8n]
         YOLO -->|Filtro Económico: ¿Persona detectada?| DET{¿Personas > 0?}
         DET -- No --> DISCARD[Descartar Frame - 0 Costo API]
         DET -- Sí --> EM[EventManager]
         EM -->|Evaluar Cooldown 10s| CD[CooldownManager]
         CD -->|Cooldown expirado| EVENT[Crear EventModel - UUIDv4]
-        FB -->|Extraer ventana temporal previa| EVENT
+        FB -->|Contexto anterior y posterior| EVENT
         EVENT --> FS[FrameSelector: Muestreo Uniforme 5 frames]
         FS --> IP[ImageProcessor: Resize 1280w + JPEG 70 + Base64]
     end
 
     subgraph Capa_Inferencia ["3. Inferencia Multimodal en Nube"]
-        IP -->|Data URLs Base64| VAI[VisionAI: OpenAI GPT-4o Vision]
+        IP -->|Data URLs Base64| VAI[VisionAI: OpenAI GPT-5.6 Luna]
         PROMPT[prompts/environmental_event.txt] --> VAI
         VAI -->|Structured Outputs / Pydantic| RES[AIAnalysisResult]
     end
@@ -101,14 +109,14 @@ flowchart TD
         DE -->|Confianza < 0.50| IGNORE[IGNORE: Descartar]
         DE -->|0.50 <= Confianza < 0.80| LOG[LOG_ONLY: Auditar]
         DE -->|Confianza >= 0.80 + Littering| WARN[WARN: Activar Voz]
-        WARN --> TTS[SpeechService: OpenAI TTS-1 / alloy]
+        WARN --> TTS[SpeechService: GPT-4o mini TTS / onyx]
         TTS -->|Generar MP3| SPK[AudioOutput: Altavoz Local / IP]
     end
 
     subgraph Capa_Persistencia_UI ["5. Persistencia, API y Dashboard"]
         EVENT --> REPO[SQLiteEventsRepository: data/events.db]
         RES --> REPO
-        METRICS[MetricsCollector + LatencyTimer] --> REPO
+        METRICS[MetricsCollector + LatencyTimer: fase posterior] -.-> REPO
         REPO --> API[FastAPI Endpoints /api/events]
         STATE[SystemState] --> WS[WebSocket /ws]
         WS --> UI[Dashboard Web: HTML5 + CSS Glassmorphism + JS]
@@ -128,30 +136,29 @@ flowchart TD
 
 ### 4.2. Visión por Computadora Local (`app/vision/`)
 - **`LocalDetector` (`detector.py`)**: Carga el modelo `yolov8n.pt` para la detección de personas (clase `person` / ID 0 en COCO). Funciona como **filtro barato**: si el encuadre está vacío, se descarta el procesamiento pesado.
-- **`FrameBuffer` (`frame_buffer.py`)**: Estructura circular en memoria RAM (`deque(maxlen=N)`) que retiene continuamente los últimos 5 segundos a 30 FPS. Permite recuperar la historia visual inmediatamente anterior al inicio del evento.
-- **`FrameSelector` (`frame_selector.py`)**: Reduce la ráfaga de 30–150 fotogramas del buffer a una secuencia estandarizada de 5 fotogramas clave mediante muestreo temporal uniforme.
+- **`FrameBuffer` (`frame_buffer.py`)**: Estructura circular y thread-safe en memoria RAM (`deque(maxlen=N)`) que conserva por defecto 5 muestras por segundo durante los últimos 5 segundos. La cámara sigue operando a su velocidad normal y el buffer recibe contexto anterior y posterior al disparo del evento.
+- **`FrameSelector` (`frame_selector.py`)**: Reduce la ventana temporal, de hasta 25 fotogramas con la configuración predeterminada, a una secuencia de 5 imágenes clave mediante muestreo uniforme.
 - **`ImageProcessor` (`image_processor.py`)**: Escala la imagen (máximo 1280 px), aplica compresión JPEG (calidad 70) y la codifica a Base64 Data URL (`data:image/jpeg;base64,...`).
 
 ### 4.3. Gestión de Eventos y Lógica de Decisión (`app/events/`)
 - **`CooldownManager` (`cooldown.py`)**: Bloquea la reactivación de alertas durante 10 segundos tras un evento para evitar fatiga de alarma y saturación de API.
 - **`EventManager` (`manager.py`)**: Orquesta el ciclo de vida del evento: inicialización, recolección de contexto temporal, cierre y entrega al repositorio.
+- **Procesamiento concurrente:** Solo se admite un evento activo. Su análisis se ejecuta en un hilo separado para que la captura y el stream MJPEG no se detengan durante la espera, la consulta a OpenAI o la generación de audio.
 - **`DecisionEngine` (`rules.py`)**: Evalúa el dictamen de IA y clasifica la acción en:
   * `IGNORE`: No hay evento o confianza menor al 50%.
   * `LOG_ONLY`: Confianza entre 50% y 79%, o actividad ambigua (portar mochilas, sentarse, colocar pertenencias).
-  * `WARN`: Confianza $\ge 80\%$ y conducta identificada como `possible_littering`.
+  * `WARN`: Confianza $\ge 80\%$, `event_type == "WASTE_DISPOSAL"` y `action_completed == true`.
 
 ### 4.4. Inteligencia Artificial y Síntesis de Voz (`app/ai/` y `app/speech/`)
-- **`VisionAI` (`vision_client.py`)**: Cliente de visión multimodal (OpenAI `gpt-4o`) configurado con Structured Outputs (`beta.chat.completions.parse`) para devolver directamente instancias validadas de `AIAnalysisResult`.
+- **`VisionAI` (`vision_client.py`)**: Cliente de visión multimodal (OpenAI `gpt-5.6-luna`) configurado con Structured Outputs (`beta.chat.completions.parse`) para devolver instancias validadas de `AIAnalysisResult`.
   * *Modo Simulación (Fase 0):* Si no se provee `OPENAI_API_KEY`, opera en modo simulación seguro sin interrumpir el servidor.
-- **`load_system_prompt` (`prompts.py`)**: Carga dinámicamente el prompt de [`prompts/environmental_event.txt`](file:///e:/OneDrive/myf-proyecto-cyt/prompts/environmental_event.txt).
-- **`OpenAISpeechService` (`openai_tts.py`)**: Convierte el texto de advertencia a audio MP3 utilizando el modelo `tts-1` y la voz `alloy`.
+- **`load_system_prompt` (`prompts.py`)**: Carga dinámicamente `prompts/environmental_event.txt` desde el repositorio.
+- **`OpenAISpeechService` (`openai_tts.py`)**: Convierte el texto de advertencia a audio MP3 utilizando `gpt-4o-mini-tts` y la voz `onyx`, con fallback a `tts-1`.
 - **`LocalSpeakerOutput` (`audio_output.py`)**: Emite el sonido generado a través de los altavoces de la estación.
 
-### 4.5. Persistencia y Métricas Experimentales (`app/storage/` y `app/metrics/`)
+### 4.5. Persistencia actual y métricas previstas (`app/storage/` y `app/metrics/`)
 - **`SQLiteEventsRepository` (`local_repository.py`)**: Base de datos relacional embebida (`data/events.db`) que guarda el JSON completo de cada evento sin dependencias de red.
-- **`LatencyTimer` (`latency.py`)**: Context manager de alta precisión (`time.perf_counter`) para registrar la latencia de inferencia y el tiempo de reacción acústica.
-- **`NetworkMetrics` (`network.py`)**: Estima el tamaño del payload en bytes transferido a la API.
-- **`MetricsCollector` (`collector.py`)**: Mantiene el historial de rendimiento para cálculos estadísticos.
+- **`LatencyTimer`, `NetworkMetrics` y `MetricsCollector`:** Sus estructuras existen, pero todavía no están conectadas al worker principal. Su integración y la evaluación de precisión, recall y falsos positivos quedan para la fase de validación experimental.
 
 ### 4.6. API REST y WebSockets (`app/api/` y `app/main.py`)
 - **Servidor FastAPI (`app/main.py`)**: Expone endpoints REST (`/api/status`, `/api/health`, `/api/events`, `/api/cameras`, `/api/config`, `/api/debug/test-speech`) y monta el canal WebSocket `/ws`.
@@ -208,7 +215,7 @@ flowchart TD
 
 ## 6. Variables e Indicadores para la Investigación Científica
 
-El prototipo recolecta métricas empíricas para validar las hipótesis del proyecto:
+La fase de validación deberá recolectar las siguientes métricas empíricas; no todas se registran todavía automáticamente en la versión actual:
 
 | Variable | Tipo | Indicador Medible |
 | :--- | :--- | :--- |
@@ -219,13 +226,13 @@ El prototipo recolecta métricas empíricas para validar las hipótesis del proy
 
 ---
 
-## 7. Marco Ético y Cumplimiento Normativo Peruano
+## 7. Marco ético y requisitos para un despliegue futuro
 
-Para garantizar el irrestricto respeto a los derechos ciudadanos en el espacio público (Puente Huallaga, Malecones):
+El prototipo evita el reconocimiento facial y la identificación de personas. Un despliegue real en el Puente Huallaga o los malecones deberá someterse a evaluación legal e institucional previa. Como principios de diseño se contemplan:
 
 1. **Ley N° 29733 (Protección de Datos Personales) y Directiva N° 01-2020-JUS/DGTAIPD:**
-   - **Anonimización por Diseño (*Privacy by Design*):** El sistema detecta **siluetas y patrones biomecánicos**, NO identidades civiles.
+   - **Minimización por diseño:** El sistema detecta presencia de personas y analiza conductas, pero no intenta determinar identidades civiles.
    - **Prohibición de Biometría:** El código **NO incluye reconocimiento facial** ni almacena nombres, rostros o números de DNI.
    - **Deber de Información:** Se contempla la instalación de carteles informativos visibles en las zonas monitorizadas, lo que refuerza el estímulo visual disuasorio (*nudge*).
-   - **Minimización de Datos:** Los fotogramas sin personas o sin eventos de contaminación se descartan de la memoria volátil instantáneamente; solo se guardan registros tabulares y métricas estadísticas anonimizadas.
+   - **Buffer temporal acotado:** Se conservan temporalmente como máximo 5 segundos muestreados en RAM; los frames no se guardan en disco por defecto.
 2. **Ley N° 30120:** Regula el empleo de tecnologías de videovigilancia orientadas al bienestar común y la seguridad en áreas públicas.

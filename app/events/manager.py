@@ -49,6 +49,8 @@ class EventManager:
         Returns:
             bool: True si hay al menos una persona y el sistema no está en cooldown.
         """
+        if self.active_event is not None:
+            return False
         if detection.persons > 0:
             if not self.cooldown_manager.is_in_cooldown():
                 return True
@@ -72,6 +74,11 @@ class EventManager:
         self.active_event = event
         logger.info(f"Evento iniciado: {event_id} (Personas detectadas: {detection.persons})")
         return event
+
+    def release_event(self, event: EventModel) -> None:
+        """Libera el evento activo si el procesamiento terminó con un error."""
+        if self.active_event is not None and self.active_event.id == event.id:
+            self.active_event = None
 
     def complete_event(self, event: EventModel) -> EventModel:
         """

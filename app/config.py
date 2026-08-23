@@ -77,6 +77,8 @@ class Settings(BaseModel):
     # ==========================================
     # BUFFER_SECONDS: Tiempo en segundos de video mantenido en RAM por `app.vision.frame_buffer.FrameBuffer`
     BUFFER_SECONDS: int = int(os.getenv("BUFFER_SECONDS", "5"))
+    # BUFFER_FPS: Muestras por segundo conservadas en RAM. La cámara puede seguir capturando a mayor FPS.
+    BUFFER_FPS: int = int(os.getenv("BUFFER_FPS", "5"))
     # EVENT_CAPTURE_SECONDS: Ventana temporal a recolectar cuando ocurre un evento
     EVENT_CAPTURE_SECONDS: int = int(os.getenv("EVENT_CAPTURE_SECONDS", "3"))
     # EVENT_COOLDOWN_SECONDS: Tiempo de espera en `app.events.cooldown.CooldownManager` para evitar llamadas repetidas

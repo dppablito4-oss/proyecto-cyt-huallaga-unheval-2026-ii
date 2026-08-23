@@ -10,7 +10,7 @@ Evita la necesidad de escribir continuamente video al disco duro o saturar el al
 
 Flujo de invocación:
 --------------------
-- Cada cuadro capturado por `app.camera` se registra en el buffer mediante `.add_frame(frame)`.
+- La cámara ofrece cada cuadro a `.add_frame(frame)`, que conserva solo la frecuencia de muestreo configurada.
 - Cuando `app.events.manager.EventManager` detecta un evento relevante, extrae el contexto previo
   con `.get_all_frames()` o `.get_last_n_frames()` y lo entrega a `app.vision.frame_selector.FrameSelector`.
 - De esta manera, el análisis de IA puede observar lo que ocurrió *justo antes* de que la persona
@@ -20,6 +20,8 @@ Flujo de invocación:
 from collections import deque
 from typing import List, Tuple, Any, Optional
 from datetime import datetime
+import threading
+import time
 
 
 class FrameBuffer:
@@ -38,33 +40,54 @@ class FrameBuffer:
         self.fps = fps
         self.max_size = max(1, buffer_seconds * fps)
         self.buffer: deque = deque(maxlen=self.max_size)
+        self._sample_interval = 1.0 / max(1, fps)
+        self._last_sample_time: Optional[float] = None
+        self._lock = threading.Lock()
 
-    def add_frame(self, frame: Any, timestamp: Optional[datetime] = None) -> None:
+    def add_frame(self, frame: Any, timestamp: Optional[datetime] = None) -> bool:
         """
-        Inserta un nuevo fotograma en el extremo derecho del buffer.
+        Inserta un fotograma si ya transcurrió el intervalo de muestreo configurado.
         Si se sobrepasa `max_size`, el elemento más antiguo se descarta automáticamente en $O(1)$.
+
+        Returns:
+            bool: True si el frame se almacenó; False si se omitió por muestreo.
         """
-        if timestamp is None:
-            timestamp = datetime.now()
-        self.buffer.append((timestamp, frame))
+        now = time.monotonic()
+        with self._lock:
+            if (
+                self._last_sample_time is not None
+                and now - self._last_sample_time < self._sample_interval
+            ):
+                return False
+
+            if timestamp is None:
+                timestamp = datetime.now()
+            self.buffer.append((timestamp, frame))
+            self._last_sample_time = now
+            return True
 
     def get_all_frames(self) -> List[Tuple[datetime, Any]]:
         """
         Devuelve una lista ordenada cronológicamente de todos los fotogramas acumulados en el buffer.
         """
-        return list(self.buffer)
+        with self._lock:
+            return list(self.buffer)
 
     def get_last_n_frames(self, n: int) -> List[Tuple[datetime, Any]]:
         """
         Devuelve los últimos $n$ fotogramas más recientes del buffer.
         """
-        frames = list(self.buffer)
+        with self._lock:
+            frames = list(self.buffer)
         return frames[-n:] if len(frames) >= n else frames
 
     def clear(self) -> None:
         """Vacía todos los cuadros almacenados en el buffer."""
-        self.buffer.clear()
+        with self._lock:
+            self.buffer.clear()
+            self._last_sample_time = None
 
     def __len__(self) -> int:
         """Retorna la cantidad actual de fotogramas en memoria."""
-        return len(self.buffer)
+        with self._lock:
+            return len(self.buffer)
