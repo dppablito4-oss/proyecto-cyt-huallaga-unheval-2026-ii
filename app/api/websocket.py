@@ -76,8 +76,8 @@ async def websocket_endpoint(websocket: WebSocket):
         })
         
         while True:
-            # Latido periódico de actualización cada 2 segundos
-            await asyncio.sleep(2)
+            # Latido periódico de actualización cada 1 segundo
+            await asyncio.sleep(1)
             await websocket.send_json({
                 "type": "system_state",
                 "data": system_state.to_dict()

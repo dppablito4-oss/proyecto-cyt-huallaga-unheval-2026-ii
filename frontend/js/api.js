@@ -120,5 +120,41 @@ const API = {
       console.error('Error al probar análisis IA:', e);
       return null;
     }
+  },
+
+  /**
+   * Cambia la fuente de cámara en caliente.
+   * Endpoint: POST /api/cameras/switch
+   * @param {string} source - Índice numérico ('0', '1', '2') o URL RTSP
+   */
+  async switchCamera(source) {
+    try {
+      const res = await fetch('/api/cameras/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: String(source) })
+      });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error('Error al cambiar cámara:', e);
+      return null;
+    }
+  },
+
+  /**
+   * Limpia los registros mostrados en el dashboard.
+   * Endpoint: POST /api/system/clear-logs
+   */
+  async clearLogs() {
+    try {
+      const res = await fetch('/api/system/clear-logs', { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error('Error al limpiar logs:', e);
+      return null;
+    }
   }
 };
+

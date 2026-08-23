@@ -96,7 +96,7 @@ class VisionAIClient:
         system_prompt = load_system_prompt()
 
         # Construir el payload de mensajes convirtiendo a Base64 Data URL si vienen en bytes
-        image_detail = settings.IMAGE_DETAIL  # 'auto' o 'high'
+        image_detail = settings.IMAGE_DETAIL  # 'low', 'auto' o 'high'
         content = [{"type": "text", "text": "Analiza la siguiente secuencia cronológica de fotogramas:"}]
 
         for item in images:
@@ -118,6 +118,7 @@ class VisionAIClient:
             # (No enviamos temperature fija para compatibilidad con modelos como gpt-5.6-luna que solo aceptan default)
             response = self.client.beta.chat.completions.parse(
                 model=self.model,
+                reasoning_effort=settings.OPENAI_VISION_REASONING_EFFORT,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": content}

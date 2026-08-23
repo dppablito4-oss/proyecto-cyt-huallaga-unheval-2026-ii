@@ -46,6 +46,18 @@ class CooldownManager:
         elapsed = (current_time - self.last_event_time).total_seconds()
         return elapsed < self.cooldown_seconds
 
+    def remaining_seconds(self, current_time: Optional[datetime] = None) -> float:
+        """
+        Calcula los segundos restantes del periodo de enfriamiento activo.
+        """
+        if self.last_event_time is None:
+            return 0.0
+        if current_time is None:
+            current_time = datetime.now()
+        elapsed = (current_time - self.last_event_time).total_seconds()
+        remaining = self.cooldown_seconds - elapsed
+        return max(0.0, round(remaining, 1))
+
     def update_last_event_time(self, event_time: Optional[datetime] = None) -> None:
         """
         Actualiza la marca temporal del último evento procesado.

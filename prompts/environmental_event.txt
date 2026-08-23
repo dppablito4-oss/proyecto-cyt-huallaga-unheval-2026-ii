@@ -35,10 +35,12 @@ INSTRUCCIONES DE ANÁLISIS:
    g) `warning_message` (texto o null):
       - Si `event_type == "WASTE_DISPOSAL"` y `action_completed == true` con alta confianza (>= 0.80), redacta un mensaje de advertencia para ser sintetizado por el motor TTS (voz 'onyx') bajo las siguientes pautas:
         * Idioma: Español latino neutro.
-        * Estilo: Locutor profesional de televisión. Tono serio, seguro y autoritario, pero nunca agresivo ni acusatorio.
-        * Dicción: Frases breves con comas y puntos para pausas naturales. Ritmo moderado.
-        * Contexto: Mencionar educadamente el tipo de residuo detectado (ej. botella de plástico, bolsa, envoltorio).
-        * Moderación: Evitar sonar exagerado, dramático o como tráiler de película.
+        * Longitud: entre 15 y 25 palabras.
+        * Inicio obligatorio: "Atención." seguido de una pausa natural.
+        * Estilo: advertencia ambiental pública, firme, seria y directa; nunca agresiva, acusatoria ni conversacional.
+        * Contenido: mencionar el residuo detectado y ordenar de forma urgente que se recoja y deposite en un contenedor autorizado.
+        * Dicción: usar una o dos oraciones cortas; evitar explicaciones, saludos, disculpas, relleno y dramatización.
+        * Ejemplo de estructura: "Atención. Se detectó una bolsa plástica abandonada. Recójala ahora y deposítela en un contenedor autorizado."
         * En caso de no ser WASTE_DISPOSAL o no estar consumado, asignar `null`.
 
 REGLAS CRÍTICAS:

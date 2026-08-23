@@ -34,6 +34,10 @@ class SpeechTestRequest(BaseModel):
         default="Prueba del sistema de vigilancia ambiental del río Huallaga.",
         description="Texto a ser convertido a voz y reproducido."
     )
+    voice: Optional[str] = Field(
+        default=None,
+        description="Voz TTS a probar. Si se omite, usa OPENAI_TTS_VOICE."
+    )
 
 
 class AnalysisTestRequest(BaseModel):
@@ -56,18 +60,19 @@ def test_speech(payload: SpeechTestRequest):
     Sintetiza el texto recibido a un archivo de audio con OpenAI TTS
     y solicita su reproducción inmediata a través del altavoz configurado.
     """
-    service = OpenAISpeechService()
-    output_path = "data/audio/test_speech.mp3"
-    result = service.generate_speech(payload.text, output_path)
+    service = OpenAISpeechService(voice=payload.voice)
+    output_path = "data/audio/test_speech.wav"
 
     speaker = LocalSpeakerOutput()
-    played = speaker.play(output_path) if result else False
+    result = service.generate_and_play_streaming(payload.text, output_path, speaker)
 
     return {
         "text": payload.text,
+        "voice": service.voice,
+        "speed": service.speed,
         "audio_generated": result is not None,
         "audio_path": result,
-        "played_locally": played
+        "played_locally": result is not None
     }
 
 

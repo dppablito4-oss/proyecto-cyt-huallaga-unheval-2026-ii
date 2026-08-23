@@ -143,6 +143,23 @@ class VideoPipelineWorker:
         system_state.set_camera_status(connected=False, source=settings.CAMERA_SOURCE, fps=0.0)
         logger.info("VideoPipelineWorker detenido.")
 
+    def switch_source(self, new_source: str) -> bool:
+        """
+        Cambia la fuente de captura de video en caliente.
+        Detiene la cámara actual si está activa, actualiza la configuración y la reinicia con la nueva fuente.
+        """
+        logger.info(f"Cambiando fuente de cámara a: {new_source}")
+        was_running = self.is_running
+        if was_running:
+            self.stop()
+
+        settings.CAMERA_SOURCE = str(new_source)
+        system_state.set_camera_status(connected=False, source=settings.CAMERA_SOURCE, fps=0.0)
+
+        if was_running:
+            return self.start()
+        return True
+
     @property
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
@@ -199,10 +216,18 @@ class VideoPipelineWorker:
             detection = self._detector.detect_persons(frame)
             system_state.set_persons_detected(detection.persons)
 
+            # Actualizar tiempo de cooldown restante en el estado
+            cooldown_rem = self._event_manager.cooldown_manager.remaining_seconds()
+            system_state.set_cooldown_remaining(cooldown_rem)
+
             # Evaluar si se debe disparar un evento
             if self._event_manager.should_trigger_event(detection):
                 event = self._event_manager.create_event(detection)
                 system_state.set_active_event(True)
+                system_state.add_log(
+                    "PERSON",
+                    f"[PERSONA] Detectada ({detection.persons} pers., {int(detection.max_confidence * 100)}% conf). Iniciando secuencia posterior a la deteccion..."
+                )
                 self._analysis_thread = threading.Thread(
                     target=self._process_event,
                     args=(event,),
@@ -228,48 +253,102 @@ class VideoPipelineWorker:
         try:
             logger.info(f"Procesando evento {event.id[:8]}...")
 
-            # 2. Esperar un poco para acumular contexto temporal
-            time.sleep(settings.EVENT_CAPTURE_SECONDS)
+            # 2. Capturar una secuencia posterior a la deteccion, sin incluir contexto previo.
+            interval = settings.SEQUENCE_FRAME_INTERVAL_SECONDS
+            capture_seconds = max(
+                settings.EVENT_CAPTURE_SECONDS,
+                settings.FRAMES_PER_ANALYSIS * interval,
+            )
+            system_state.add_log(
+                "SEQUENCE",
+                f"[SECUENCIA] Capturando {settings.FRAMES_PER_ANALYSIS} fotogramas, uno cada {interval:g}s durante {capture_seconds:g}s."
+            )
+            time.sleep(capture_seconds)
 
-            # 3. Obtener frames del buffer y seleccionar los mejores
-            all_frames = self._frame_buffer.get_all_frames()
-            selected = self._frame_selector.select_frames(all_frames)
+            # 3. Seleccionar cada muestra a partir del segundo posterior a la deteccion.
+            selected = self._frame_buffer.get_frames_at_intervals(
+                start_time=event.started_at,
+                interval_seconds=interval,
+                count=settings.FRAMES_PER_ANALYSIS,
+            )
 
             # 4. Actualizar metadata de captura
-            event.capture.total_frames = len(all_frames)
+            event.capture.total_frames = len(selected)
             event.capture.selected_frames = len(selected)
             event.capture.jpeg_quality = settings.JPEG_QUALITY
 
             # 5. Comprimir frames a JPEG binario (ImageProcessor solo procesa imagen)
             jpeg_frames = []
-            for ts, frame in selected:
+            preview_urls = []
+            preview_dir = settings.DATA_DIR / "frames"
+            preview_dir.mkdir(parents=True, exist_ok=True)
+            for index, (_, frame) in enumerate(selected, start=1):
                 jpeg_bytes = self._image_processor.compress_jpeg(frame)
                 jpeg_frames.append(jpeg_bytes)
+                preview_name = f"ai-preview-{event.id}-{index}.jpg"
+                (preview_dir / preview_name).write_bytes(jpeg_bytes)
+                preview_urls.append(f"/api/cameras/analysis-preview/{preview_name}")
 
-            # 6. Enviar a VisionAIClient (maneja serialización Base64 y request de red)
+            system_state.set_analysis_preview_urls(preview_urls)
+            system_state.add_log(
+                "SEQUENCE",
+                f"[SECUENCIA] {len(jpeg_frames)} fotogramas preparados para consultar a la IA."
+            )
+
+            # 6. Enviar a VisionAIClient midiendo tiempo exacto de respuesta
+            system_state.set_ai_status("sending")
+            system_state.add_log(
+                "AI",
+                f"[IA] Enviando {len(jpeg_frames)} fotogramas a OpenAI Vision ({settings.OPENAI_VISION_MODEL}, reasoning={settings.OPENAI_VISION_REASONING_EFFORT}, detalle={settings.IMAGE_DETAIL}). Esperando respuesta..."
+            )
+
+            t_ai_start = time.perf_counter()
             ai_result = self._vision_ai.analyze_sequence(jpeg_frames)
+            ai_latency = time.perf_counter() - t_ai_start
+
             event.analysis = ai_result.model_dump()
+            system_state.set_ai_status("completed", latency=ai_latency)
+
+            system_state.add_log(
+                "SUCCESS",
+                f"[RESPUESTA IA] Recibida en {ai_latency:.2f}s: [{ai_result.event_type}] ({int(ai_result.confidence * 100)}% conf) - {ai_result.description}"
+            )
 
             # 7. Evaluar decisión
             decision = self._decision_engine.evaluate_decision(ai_result)
             event.decision = decision
 
+            if decision == "WARN":
+                system_state.add_log("WARN", f"[ALERTA] ¡Arrojo de residuos confirmado! Decisión: WARN")
+            elif decision == "LOG_ONLY":
+                system_state.add_log("DECISION", f"[DECISIÓN] LOG_ONLY (Registrado para auditoría e investigación).")
+            else:
+                system_state.add_log("INFO", f"[INFO] Decisión: IGNORE (Sin acción de arrojo detectada).")
+
             # 8. Actualizar estado del sistema
             system_state.record_analysis_result(
                 confidence=ai_result.confidence,
-                warning_message=ai_result.warning_message
+                decision=decision,
+                diagnosis=ai_result.description,
+                warning_message=ai_result.warning_message,
+                latency=ai_latency
             )
 
             # 9. Si la decisión es WARN, generar voz y reproducir
             if decision == "WARN" and ai_result.warning_message:
-                audio_path = f"data/audio/warning_{event.id[:8]}.mp3"
-                generated = self._tts_service.generate_speech(ai_result.warning_message, audio_path)
+                system_state.add_log("AUDIO", f"[VOZ] Sintetizando advertencia: \"{ai_result.warning_message}\"")
+                system_state.add_log("AUDIO", "[AUDIO] Recibiendo PCM y reproduciendo advertencia en streaming...")
+                audio_path = f"data/audio/warning_{event.id[:8]}.wav"
+                generated = self._tts_service.generate_and_play_streaming(
+                    ai_result.warning_message, audio_path, self._audio_output
+                )
                 if generated:
-                    self._audio_output.play(generated)
+                    system_state.add_log("AUDIO", "[AUDIO] Advertencia finalizada y archivada en formato WAV.")
 
             # 10. Completar y guardar evento
             completed_event = self._event_manager.complete_event(event)
             self._repository.save(completed_event)
+            system_state.add_log("COOLDOWN", f"[ENFRIAMIENTO] Periodo de {settings.EVENT_COOLDOWN_SECONDS}s activado para evitar spam.")
             logger.info(f"Evento {event.id[:8]} completado → decisión: {decision}")
 
         except Exception as e:

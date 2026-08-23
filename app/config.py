@@ -37,7 +37,7 @@ class Settings(BaseModel):
     # 1. Configuración General de la Aplicación
     # ==========================================
     APP_NAME: str = "Huallaga AI Monitor"
-    APP_VERSION: str = "0.1.0"
+    APP_VERSION: str = "0.5.1"
     APP_ENV: str = os.getenv("APP_ENV", "development")
     DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
     HOST: str = os.getenv("HOST", "127.0.0.1")
@@ -49,11 +49,20 @@ class Settings(BaseModel):
     # Utilizado por `app.ai.vision_client.VisionAI` para analizar secuencias de imágenes
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     OPENAI_VISION_MODEL: str = os.getenv("OPENAI_VISION_MODEL", "gpt-5.6-luna")
-    IMAGE_DETAIL: str = os.getenv("IMAGE_DETAIL", "auto")
+    # `none` minimiza la latencia para esta clasificación visual estructurada.
+    OPENAI_VISION_REASONING_EFFORT: str = os.getenv("OPENAI_VISION_REASONING_EFFORT", "none")
+    # `low` reduce los tokens de imagen; evaluar precisión antes de subirlo a `auto`.
+    IMAGE_DETAIL: str = os.getenv("IMAGE_DETAIL", "low")
 
     # Utilizado por `app.speech.openai_tts.OpenAISpeechService` para generar advertencias en audio
     OPENAI_TTS_MODEL: str = os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
     OPENAI_TTS_VOICE: str = os.getenv("OPENAI_TTS_VOICE", "onyx")
+    # Un ritmo levemente superior mantiene la advertencia breve y urgente sin perder dicción.
+    OPENAI_TTS_SPEED: float = float(os.getenv("OPENAI_TTS_SPEED", "1.1"))
+    # PCM evita decodificar MP3 y permite enviar cada fragmento al altavoz apenas llega.
+    OPENAI_TTS_RESPONSE_FORMAT: str = os.getenv("OPENAI_TTS_RESPONSE_FORMAT", "pcm")
+    # Pequeño búfer para absorber variaciones de red sin entrecortar la advertencia.
+    OPENAI_TTS_STREAM_BUFFER_MS: int = int(os.getenv("OPENAI_TTS_STREAM_BUFFER_MS", "400"))
 
     # ==========================================
     # 3. Adquisición de Video (Cámara / Stream)
@@ -79,18 +88,20 @@ class Settings(BaseModel):
     BUFFER_SECONDS: int = int(os.getenv("BUFFER_SECONDS", "5"))
     # BUFFER_FPS: Muestras por segundo conservadas en RAM. La cámara puede seguir capturando a mayor FPS.
     BUFFER_FPS: int = int(os.getenv("BUFFER_FPS", "5"))
-    # EVENT_CAPTURE_SECONDS: Ventana temporal a recolectar cuando ocurre un evento
-    EVENT_CAPTURE_SECONDS: int = int(os.getenv("EVENT_CAPTURE_SECONDS", "3"))
+    # EVENT_CAPTURE_SECONDS: Duracion total de la secuencia posterior a una deteccion
+    EVENT_CAPTURE_SECONDS: float = float(os.getenv("EVENT_CAPTURE_SECONDS", "5.6"))
+    # SEQUENCE_FRAME_INTERVAL_SECONDS: Separacion temporal entre los fotogramas enviados a la IA
+    SEQUENCE_FRAME_INTERVAL_SECONDS: float = float(os.getenv("SEQUENCE_FRAME_INTERVAL_SECONDS", "1"))
     # EVENT_COOLDOWN_SECONDS: Tiempo de espera en `app.events.cooldown.CooldownManager` para evitar llamadas repetidas
-    EVENT_COOLDOWN_SECONDS: int = int(os.getenv("EVENT_COOLDOWN_SECONDS", "10"))
+    EVENT_COOLDOWN_SECONDS: int = int(os.getenv("EVENT_COOLDOWN_SECONDS", "20"))
 
     # ==========================================
     # 6. Procesamiento y Selección de Imágenes
     # ==========================================
     # FRAMES_PER_ANALYSIS: Cantidad de imágenes que `app.vision.frame_selector.FrameSelector` extraerá
-    FRAMES_PER_ANALYSIS: int = int(os.getenv("FRAMES_PER_ANALYSIS", "5"))
+    FRAMES_PER_ANALYSIS: int = int(os.getenv("FRAMES_PER_ANALYSIS", "7"))
     # Dimensiones y calidad de compresión utilizadas por `app.vision.image_processor.ImageProcessor`
-    IMAGE_MAX_WIDTH: int = int(os.getenv("IMAGE_MAX_WIDTH", "1280"))
+    IMAGE_MAX_WIDTH: int = int(os.getenv("IMAGE_MAX_WIDTH", "960"))
     JPEG_QUALITY: int = int(os.getenv("JPEG_QUALITY", "70"))
 
     # ==========================================

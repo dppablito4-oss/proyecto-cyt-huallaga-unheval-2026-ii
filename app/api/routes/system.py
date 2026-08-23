@@ -49,3 +49,13 @@ def stop_pipeline():
 
     pipeline_worker.stop()
     return {"message": "Pipeline de video detenido correctamente.", "running": False}
+
+
+@router.post("/clear-logs", summary="Limpiar el historial de logs del sistema")
+def clear_system_logs():
+    """
+    Limpia la cola de logs mostrados en el dashboard.
+    """
+    from app.state import system_state
+    system_state.clear_logs()
+    return {"message": "Logs limpiados correctamente."}

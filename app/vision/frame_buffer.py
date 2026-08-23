@@ -19,7 +19,7 @@ Flujo de invocación:
 
 from collections import deque
 from typing import List, Tuple, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import threading
 import time
 
@@ -80,6 +80,29 @@ class FrameBuffer:
         with self._lock:
             frames = list(self.buffer)
         return frames[-n:] if len(frames) >= n else frames
+
+    def get_frames_at_intervals(
+        self,
+        start_time: datetime,
+        interval_seconds: float,
+        count: int,
+    ) -> List[Tuple[datetime, Any]]:
+        """Obtiene muestras posteriores a una deteccion, separadas por un intervalo fijo."""
+        if count <= 0:
+            return []
+
+        with self._lock:
+            frames = list(self.buffer)
+
+        selected: List[Tuple[datetime, Any]] = []
+        next_target = start_time + timedelta(seconds=interval_seconds)
+        for timestamp, frame in frames:
+            if timestamp >= next_target:
+                selected.append((timestamp, frame))
+                if len(selected) == count:
+                    break
+                next_target = start_time + timedelta(seconds=interval_seconds * (len(selected) + 1))
+        return selected
 
     def clear(self) -> None:
         """Vacía todos los cuadros almacenados en el buffer."""
