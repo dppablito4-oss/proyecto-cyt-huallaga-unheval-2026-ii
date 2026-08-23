@@ -6,6 +6,16 @@
 
 ---
 
+## Estado actual del prototipo
+
+La versión actual implementa un flujo experimental de extremo a extremo: captura de video, detección local de personas, análisis multimodal, decisión, síntesis de voz, persistencia local y dashboard.
+
+La captura permanece activa mientras el evento acumula contexto y mientras la IA o el TTS procesan el resultado. El análisis se ejecuta en un hilo independiente y se admite un solo evento activo a la vez. Para reducir el consumo de RAM, la cámara puede operar a su FPS normal, pero el buffer conserva por defecto solo **5 muestras por segundo durante 5 segundos** (máximo 25 frames antes de la selección final).
+
+Esta versión demuestra la viabilidad técnica del flujo. La validación científica con videos etiquetados, métricas completas, tracking, pose, segmentación y despliegue en campo corresponde a etapas posteriores.
+
+---
+
 ## Contexto y Justificación Científica
 
 El río Huallaga a su paso por el área metropolitana de **Huánuco, Amarilis y Pillco Marca** enfrenta una severa crisis por contaminación y acumulación recurrente de residuos sólidos. Informes oficiales de entidades como el OEFA, FEMA y la UNHEVAL han documentado hasta **216 puntos críticos** a lo largo de su cuenca regional, con una generación diaria de entre **100 y 120 toneladas de residuos**.
@@ -41,13 +51,13 @@ Las estrategias tradicionales basadas en campañas de limpieza periódicas son v
          ┌─────────────────────┴─────────────────────┐
          ▼                                           ▼
    LocalDetector (YOLO)                     FrameBuffer (5s RAM)
-(¿Hay personas presentes?)               (Contexto temporal previo)
+(¿Hay personas presentes?)            (5 muestras/s; antes y después)
          │                                           │
          └─────────────────────┬─────────────────────┘
                                │
                                ▼
                           EventManager
-                     (Cooldown & Trigger)
+                  (Cooldown + un evento activo)
                                │
                                ▼
                          FrameSelector
@@ -59,7 +69,7 @@ Las estrategias tradicionales basadas en campañas de limpieza periódicas son v
                                │
                                ▼
                            VisionAI
-                 (OpenAI Multimodal / GPT-4o)
+             (OpenAI Multimodal / GPT-5.6 Luna)
                                │
                                ▼
                        AIAnalysisResult
@@ -73,14 +83,14 @@ Las estrategias tradicionales basadas en campañas de limpieza periódicas son v
              (Auditar en DB)               │
                                            ▼
                                      SpeechService
-                                    (OpenAI TTS-1)
+                              (OpenAI GPT-4o mini TTS)
                                            │
                                            ▼
                                       AudioOutput
                                   (🔊 Altavoz Local)
 ```
 
-En paralelo, el estado global (`SystemState`) se difunde reactivamente al **Dashboard Web** a través de **FastAPI** y canales **WebSocket**.
+La captura de cámara continúa en su propio hilo mientras el análisis del evento espera contexto, consulta la IA y genera audio. En paralelo, el estado global (`SystemState`) se difunde al **Dashboard Web** mediante **FastAPI** y **WebSocket**.
 
 ---
 
@@ -110,7 +120,7 @@ huallaga-ai-monitor/
 │   ├── vision/                       # Pipeline de Visión por Computadora
 │   │   ├── detector.py               # YOLOv8 local (filtro económico de personas)
 │   │   ├── tracker.py                # Interfaz de seguimiento de objetos
-│   │   ├── frame_buffer.py           # Buffer circular temporal en RAM (5s)
+│   │   ├── frame_buffer.py           # Buffer circular muestreado en RAM (5s a 5 FPS por defecto)
 │   │   ├── frame_selector.py         # Muestreo temporal uniforme de frames
 │   │   └── image_processor.py        # Compresión JPEG, resize y Base64
 │   │
@@ -223,11 +233,13 @@ cp .env.example .env
 Edita `.env` con tus credenciales si deseas ejecutar inferencia real:
 ```env
 OPENAI_API_KEY=sk-tu-api-key-aqui
-OPENAI_VISION_MODEL=gpt-4o
-OPENAI_TTS_MODEL=tts-1
-OPENAI_TTS_VOICE=alloy
+OPENAI_VISION_MODEL=gpt-5.6-luna
+OPENAI_TTS_MODEL=gpt-4o-mini-tts
+OPENAI_TTS_VOICE=onyx
 CAMERA_SOURCE=0
 YOLO_MODEL=yolov8n.pt
+BUFFER_SECONDS=5
+BUFFER_FPS=5
 ```
 > [!NOTE]
 > El sistema arranca y opera en **Modo Simulación / Standby** sin necesidad de API Key ni cámara conectada.
@@ -254,6 +266,7 @@ python tests/test_frame_selector.py
 python tests/test_image_processor.py
 python tests/test_ai_schema.py
 python tests/test_event_manager.py
+python tests/test_frame_buffer.py
 ```
 
 ### Scripts de Diagnóstico:
@@ -275,7 +288,7 @@ python scripts/benchmark_images.py
 | `GET` | `/api/events/{id}` | Retorna el detalle completo de un evento por su UUID. |
 | `GET` | `/api/cameras/status` | Consulta la resolución y estado de la cámara. |
 | `GET` | `/api/config` | Consulta los parámetros de configuración no sensibles. |
-| `PATCH` | `/api/config` | Modifica en caliente parámetros (frames, calidad JPEG, umbrales). |
+| `PATCH` | `/api/config` | Actualiza valores de configuración en memoria; algunos componentes requieren reiniciar el pipeline para aplicar el cambio. |
 | `POST` | `/api/debug/test-speech` | Prueba manual de síntesis y reproducción de voz TTS. |
 | `WS` | `/ws` | Canal WebSocket para actualizaciones en vivo del dashboard. |
 
@@ -283,10 +296,25 @@ python scripts/benchmark_images.py
 
 ##  Marco Ético y Protección de Datos Personales
 
-El diseño del sistema cumple estrictamente con el marco legal peruano (**Ley N° 29733 de Protección de Datos Personales**, **Ley N° 30120** y la **Directiva N° 01-2020-JUS/DGTAIPD**):
-- **Anonimización por Diseño (*Privacy by Design*):** El sistema analiza siluetas y conductas físicas de arrojo de objetos, **SIN utilizar reconocimiento facial ni identificación biométrica**.
+El diseño adopta principios de minimización de datos y evita deliberadamente la identificación biométrica. Un despliegue real en espacios públicos requerirá evaluación y autorización institucional conforme al marco legal peruano aplicable:
+- **Detección conductual:** El sistema detecta presencia de personas y analiza acciones, **SIN utilizar reconocimiento facial ni intentar identificar nombres o identidades civiles**.
 - **No almacenamiento de identidades civiles:** No se registran nombres, rostros ni números de DNI.
-- **Minimización de Datos:** Los fotogramas donde no se detectan eventos se descartan instantáneamente de la memoria volátil; solo se conservan metadatos estadísticos anonimizados para investigación académica.
+- **Minimización de datos:** El buffer es temporal, acotado y muestreado. Los frames no se guardan en disco por defecto; los eventos conservan resultados y metadatos para evaluación.
+
+---
+
+## Mejoras previstas para fases posteriores
+
+Estas mejoras forman parte de la hoja de ruta y **no se consideran implementadas en la versión actual**:
+
+- tracking de personas con ByteTrack o BoT-SORT;
+- pose estimation y segmentación para generar mejores eventos candidatos;
+- métricas completas de latencia, payload, precisión, recall y falsos positivos;
+- conjunto de videos positivos y negativos etiquetados;
+- reconexión automática de cámaras RTSP/USB;
+- configuración completamente dinámica sin reiniciar componentes;
+- autenticación y protección de endpoints para un despliegue en red;
+- cola persistente o escalable para múltiples cámaras y eventos.
 
 ---
 

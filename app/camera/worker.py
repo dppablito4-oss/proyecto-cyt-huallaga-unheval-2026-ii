@@ -82,7 +82,7 @@ class VideoPipelineWorker:
         )
         self._frame_buffer = FrameBuffer(
             buffer_seconds=settings.BUFFER_SECONDS,
-            fps=settings.CAMERA_FPS
+            fps=settings.BUFFER_FPS
         )
         self._frame_selector = FrameSelector(
             target_frames=settings.FRAMES_PER_ANALYSIS,
@@ -106,6 +106,7 @@ class VideoPipelineWorker:
         # Frame compartido para streaming MJPEG (leído por el endpoint /api/cameras/stream)
         self._current_frame = None
         self._frame_lock = threading.Lock()
+        self._analysis_thread: Optional[threading.Thread] = None
 
     @property
     def current_frame(self):
@@ -131,6 +132,11 @@ class VideoPipelineWorker:
         if self._thread is not None:
             self._thread.join(timeout=5.0)
             self._thread = None
+        analysis_thread = self._analysis_thread
+        if analysis_thread is not None:
+            analysis_thread.join(timeout=5.0)
+            if not analysis_thread.is_alive() and self._analysis_thread is analysis_thread:
+                self._analysis_thread = None
         if self._camera is not None:
             self._camera.close()
             self._camera = None
@@ -195,7 +201,15 @@ class VideoPipelineWorker:
 
             # Evaluar si se debe disparar un evento
             if self._event_manager.should_trigger_event(detection):
-                self._process_event(detection)
+                event = self._event_manager.create_event(detection)
+                system_state.set_active_event(True)
+                self._analysis_thread = threading.Thread(
+                    target=self._process_event,
+                    args=(event,),
+                    name=f"EventAnalysis-{event.id[:8]}",
+                    daemon=True
+                )
+                self._analysis_thread.start()
 
             # Limitar la velocidad del bucle si la cámara no tiene limitador propio
             time.sleep(0.001)
@@ -205,16 +219,13 @@ class VideoPipelineWorker:
             self._camera.close()
             self._camera = None
 
-    def _process_event(self, detection) -> None:
+    def _process_event(self, event) -> None:
         """
         Procesa un evento completo: captura → selección → compresión → IA → decisión → voz.
-        Se ejecuta dentro del hilo del worker para simplificar la Fase 0.
+        Se ejecuta en un hilo separado para que la captura de cámara nunca se congele
+        mientras se acumula contexto, se consulta la IA o se genera el audio.
         """
         try:
-            system_state.set_active_event(True)
-
-            # 1. Crear evento
-            event = self._event_manager.create_event(detection)
             logger.info(f"Procesando evento {event.id[:8]}...")
 
             # 2. Esperar un poco para acumular contexto temporal
@@ -263,5 +274,9 @@ class VideoPipelineWorker:
 
         except Exception as e:
             logger.error(f"Error procesando evento: {e}")
+            self._event_manager.release_event(event)
         finally:
-            system_state.set_active_event(False)
+            if self._event_manager.active_event is None:
+                system_state.set_active_event(False)
+            if self._analysis_thread is threading.current_thread():
+                self._analysis_thread = None

@@ -44,6 +44,7 @@ def get_safe_config(settings: Settings = Depends(get_settings)):
         "YOLO_MODEL": settings.YOLO_MODEL,
         "YOLO_PERSON_CONFIDENCE": settings.YOLO_PERSON_CONFIDENCE,
         "BUFFER_SECONDS": settings.BUFFER_SECONDS,
+        "BUFFER_FPS": settings.BUFFER_FPS,
         "EVENT_COOLDOWN_SECONDS": settings.EVENT_COOLDOWN_SECONDS,
         "FRAMES_PER_ANALYSIS": settings.FRAMES_PER_ANALYSIS,
         "JPEG_QUALITY": settings.JPEG_QUALITY,

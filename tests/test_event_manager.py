@@ -18,5 +18,16 @@ def test_event_manager_cooldown():
     assert manager.should_trigger_event(detection) is False
     print("test_event_manager_cooldown PASSED")
 
+
+def test_event_manager_blocks_while_event_is_active():
+    manager = EventManager(cooldown_seconds=0)
+    detection = LocalDetectionSummary(persons=1, max_confidence=0.90)
+
+    event = manager.create_event(detection)
+    assert manager.should_trigger_event(detection) is False
+
+    manager.complete_event(event)
+    assert manager.should_trigger_event(detection) is True
+
 if __name__ == "__main__":
     test_event_manager_cooldown()
