@@ -20,10 +20,16 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 """
 
 import logging
+import sys
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pathlib import Path
+
+# Asegurar que el directorio raíz del proyecto esté en sys.path al ejecutarse como script directo
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from app.config import settings
 from app.api.routes import api_router
@@ -92,3 +98,14 @@ async def shutdown_event():
     """
     pipeline_worker.stop()
     logger.info("Apagando Huallaga AI Monitor y liberando recursos...")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "app.main:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.DEBUG,
+    )
+
