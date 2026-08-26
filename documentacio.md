@@ -1,6 +1,6 @@
 # 1. Nombre provisional
 
-**Sistema inteligente de vigilancia ambiental para detección preventiva del arrojo de residuos sólidos en la ribera del río Huallaga**
+**SIVARH: Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga orientado a la detección preventiva del arrojo directo de residuos sólidos, sector Puente Huallaga – UNHEVAL**
 
 Versión inicial:
 

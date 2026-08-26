@@ -88,7 +88,7 @@ const API = {
    * Endpoint: POST /api/debug/test-speech
    * @param {string} text - Texto a sintetizar
    */
-  async testSpeech(text = 'Prueba del sistema de vigilancia ambiental del río Huallaga.') {
+  async testSpeech(text = 'Prueba de advertencia ambiental de SIVARH en el sector Puente Huallaga.') {
     try {
       const res = await fetch('/api/debug/test-speech', {
         method: 'POST',
@@ -155,6 +155,27 @@ const API = {
       console.error('Error al limpiar logs:', e);
       return null;
     }
+  },
+
+  async startManualRecognition() {
+    try {
+      const res = await fetch('/api/system/manual/start-recognition', { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error('Error al iniciar reconocimiento manual:', e);
+      return null;
+    }
+  },
+
+  async sendManualImages() {
+    try {
+      const res = await fetch('/api/system/manual/send-images', { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error('Error al enviar imágenes manuales:', e);
+      return null;
+    }
   }
 };
-

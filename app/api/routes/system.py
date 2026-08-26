@@ -59,3 +59,21 @@ def clear_system_logs():
     from app.state import system_state
     system_state.clear_logs()
     return {"message": "Logs limpiados correctamente."}
+
+
+@router.post("/manual/start-recognition", summary="Capturar secuencia manual")
+def start_manual_recognition():
+    """Captura cuatro imágenes, una cada 1.5 segundos, sin consultar a la IA."""
+    from app.main import pipeline_worker
+
+    accepted, message = pipeline_worker.start_manual_recognition()
+    return {"accepted": accepted, "message": message}
+
+
+@router.post("/manual/send-images", summary="Enviar secuencia manual a la IA")
+def send_manual_images():
+    """Envía a la IA la última secuencia manual completa."""
+    from app.main import pipeline_worker
+
+    accepted, message = pipeline_worker.analyze_manual_sequence()
+    return {"accepted": accepted, "message": message}

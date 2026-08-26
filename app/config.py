@@ -1,5 +1,5 @@
 """
-Módulo de Configuración Global del Sistema (Huallaga AI Monitor)
+Módulo de Configuración Global de SIVARH
 ===============================================================
 
 Responsabilidad:
@@ -36,7 +36,7 @@ class Settings(BaseModel):
     # ==========================================
     # 1. Configuración General de la Aplicación
     # ==========================================
-    APP_NAME: str = "Huallaga AI Monitor"
+    APP_NAME: str = "SIVARH"
     APP_VERSION: str = "0.5.1"
     APP_ENV: str = os.getenv("APP_ENV", "development")
     DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
@@ -94,6 +94,10 @@ class Settings(BaseModel):
     SEQUENCE_FRAME_INTERVAL_SECONDS: float = float(os.getenv("SEQUENCE_FRAME_INTERVAL_SECONDS", "1"))
     # EVENT_COOLDOWN_SECONDS: Tiempo de espera en `app.events.cooldown.CooldownManager` para evitar llamadas repetidas
     EVENT_COOLDOWN_SECONDS: int = int(os.getenv("EVENT_COOLDOWN_SECONDS", "20"))
+    # Modo temporal de pruebas: la interfaz controla cuándo capturar y analizar.
+    MANUAL_RECOGNITION_MODE: bool = os.getenv("MANUAL_RECOGNITION_MODE", "True").lower() in ("true", "1", "yes")
+    MANUAL_CAPTURE_FRAMES: int = int(os.getenv("MANUAL_CAPTURE_FRAMES", "4"))
+    MANUAL_CAPTURE_INTERVAL_SECONDS: float = float(os.getenv("MANUAL_CAPTURE_INTERVAL_SECONDS", "1.5"))
 
     # ==========================================
     # 6. Procesamiento y Selección de Imágenes

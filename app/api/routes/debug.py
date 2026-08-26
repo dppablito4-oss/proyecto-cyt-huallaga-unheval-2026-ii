@@ -31,7 +31,7 @@ router = APIRouter(prefix="/debug")
 class SpeechTestRequest(BaseModel):
     """Payload para solicitud de prueba de voz."""
     text: str = Field(
-        default="Prueba del sistema de vigilancia ambiental del río Huallaga.",
+        default="Prueba de advertencia ambiental de SIVARH en el sector Puente Huallaga.",
         description="Texto a ser convertido a voz y reproducido."
     )
     voice: Optional[str] = Field(

@@ -6,7 +6,7 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('Inicializando interfaz simplificada de Huallaga AI Monitor...');
+  console.log('Inicializando interfaz simplificada de SIVARH...');
 
   // 1. Instanciar y conectar el cliente WebSocket para actualizaciones reactivas continuas
   const ws = new WSClient((payload) => {
@@ -28,6 +28,33 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       startBtn.disabled = false;
       startBtn.textContent = 'Iniciar';
+    });
+  }
+
+  const manualCaptureBtn = document.getElementById('btn-start-manual-recognition');
+  const manualSendBtn = document.getElementById('btn-send-manual-images');
+  if (manualCaptureBtn && manualSendBtn) {
+    manualCaptureBtn.addEventListener('click', async () => {
+      manualCaptureBtn.disabled = true;
+      manualSendBtn.disabled = true;
+      manualCaptureBtn.textContent = 'Capturando 0/4...';
+      const result = await API.startManualRecognition();
+      if (!result || !result.accepted) {
+        alert(result?.message || 'No se pudo iniciar la captura manual.');
+        manualCaptureBtn.disabled = false;
+        manualCaptureBtn.textContent = 'Iniciar reconocimiento';
+      }
+    });
+
+    manualSendBtn.addEventListener('click', async () => {
+      manualSendBtn.disabled = true;
+      manualSendBtn.textContent = 'Enviando a IA...';
+      const result = await API.sendManualImages();
+      if (!result || !result.accepted) {
+        alert(result?.message || 'No se pudo enviar la secuencia a la IA.');
+        manualSendBtn.disabled = false;
+        manualSendBtn.textContent = 'Enviar imágenes a IA';
+      }
     });
   }
 
@@ -75,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
     testSpeechBtn.addEventListener('click', async () => {
       testSpeechBtn.disabled = true;
       testSpeechBtn.textContent = 'Sintetizando...';
-      const result = await API.testSpeech('Prueba del sistema de vigilancia ambiental del río Huallaga.');
+      const result = await API.testSpeech('Prueba de advertencia ambiental de SIVARH en el sector Puente Huallaga.');
       if (result) {
         console.log('TTS resultado:', result);
       }

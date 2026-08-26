@@ -12,9 +12,10 @@ const Dashboard = {
     this.setText('persons-count', data.persons_detected ?? 0);
     this.setText('fps-badge', `${Number(data.fps ?? 0).toFixed(1)} FPS`);
     this.updateCooldown(data.cooldown_remaining ?? 0);
+    this.updateManualRecognition(data);
     this.updateAiState(data);
     this.updateDecision(data.last_decision);
-    this.setText('last-diagnosis-text', data.last_diagnosis || 'Esperando una deteccion para iniciar el analisis.');
+    this.setText('last-diagnosis-text', data.last_diagnosis || 'Captura una secuencia manual para iniciar el análisis.');
     this.setText('warning-text', data.last_warning_message || 'Sin advertencias emitidas.');
     this.renderPreview(data.analysis_preview_urls || [], data.ai_status);
 
@@ -53,10 +54,39 @@ const Dashboard = {
   },
 
   updateCooldown(remaining) {
+    if (document.getElementById('btn-start-manual-recognition')) {
+      this.setText('cooldown-status', 'Manual');
+      this.setText('cooldown-footer', 'Modo manual: sin espera automática');
+      return;
+    }
     const ready = remaining <= 0;
     const text = ready ? 'Listo' : `${Math.ceil(remaining)} s`;
     this.setText('cooldown-status', text);
     this.setText('cooldown-footer', ready ? 'Tiempo de espera: listo' : `Tiempo de espera: ${text}`);
+  },
+
+  updateManualRecognition(data) {
+    const captureBtn = document.getElementById('btn-start-manual-recognition');
+    const sendBtn = document.getElementById('btn-send-manual-images');
+    if (!captureBtn || !sendBtn) return;
+
+    const captured = Number(data.manual_frames_captured ?? 0);
+    const ready = Boolean(data.manual_sequence_ready);
+    if (ready) {
+      captureBtn.disabled = false;
+      captureBtn.textContent = 'Nueva secuencia';
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Enviar imágenes a IA';
+    } else if (captured > 0) {
+      captureBtn.disabled = true;
+      captureBtn.textContent = `Capturando ${captured}/4...`;
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Enviar imágenes a IA';
+    } else if (!data.active_event) {
+      captureBtn.disabled = false;
+      captureBtn.textContent = 'Iniciar reconocimiento';
+      if (sendBtn.textContent !== 'Enviando a IA...') sendBtn.disabled = true;
+    }
   },
 
   updateAiState(data) {
@@ -95,7 +125,7 @@ const Dashboard = {
 
     if (!urls.length) {
       const message = document.createElement('p');
-      message.textContent = 'Las imagenes seleccionadas apareceran aqui cuando se detecte una persona.';
+      message.textContent = 'Presiona “Iniciar reconocimiento” para capturar cuatro imágenes.';
       container.appendChild(message);
       return;
     }

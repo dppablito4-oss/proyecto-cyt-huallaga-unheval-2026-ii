@@ -28,7 +28,7 @@ class WSClient {
 
     // Evento de conexión exitosa
     this.socket.onopen = () => {
-      console.log('✅ WebSocket conectado exitosamente con Huallaga AI Monitor.');
+      console.log('✅ WebSocket conectado exitosamente con SIVARH.');
       if (this.reconnectTimer) {
         clearTimeout(this.reconnectTimer);
         this.reconnectTimer = null;

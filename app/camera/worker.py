@@ -21,6 +21,8 @@ Flujo de invocación:
 import time
 import logging
 import threading
+import uuid
+from datetime import datetime
 from typing import Optional
 
 from app.config import settings
@@ -38,6 +40,7 @@ from app.ai.vision_client import VisionAI
 from app.speech.openai_tts import OpenAISpeechService
 from app.speech.audio_output import LocalSpeakerOutput
 from app.storage.local_repository import SQLiteEventsRepository
+from app.models.event import EventModel, LocalDetectionSummary
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +110,9 @@ class VideoPipelineWorker:
         self._current_frame = None
         self._frame_lock = threading.Lock()
         self._analysis_thread: Optional[threading.Thread] = None
+        self._manual_capture_thread: Optional[threading.Thread] = None
+        self._manual_frames = []
+        self._manual_lock = threading.Lock()
 
     @property
     def current_frame(self):
@@ -142,6 +148,90 @@ class VideoPipelineWorker:
             self._camera = None
         system_state.set_camera_status(connected=False, source=settings.CAMERA_SOURCE, fps=0.0)
         logger.info("VideoPipelineWorker detenido.")
+
+    def start_manual_recognition(self) -> tuple[bool, str]:
+        """Inicia una captura manual de cuatro imágenes; todavía no consulta la IA."""
+        if not self.is_running or self._camera is None:
+            return False, "La cámara no está activa. Inicia el pipeline primero."
+        if self._analysis_thread is not None and self._analysis_thread.is_alive():
+            return False, "Hay un análisis en curso."
+        if self._manual_capture_thread is not None and self._manual_capture_thread.is_alive():
+            return False, "La secuencia manual ya se está capturando."
+
+        with self._manual_lock:
+            self._manual_frames = []
+        system_state.set_analysis_preview_urls([])
+        system_state.set_manual_sequence_status(captured=0, ready=False)
+        self._manual_capture_thread = threading.Thread(
+            target=self._capture_manual_sequence,
+            name="ManualRecognitionCapture",
+            daemon=True,
+        )
+        self._manual_capture_thread.start()
+        return True, "Captura manual iniciada."
+
+    def analyze_manual_sequence(self) -> tuple[bool, str]:
+        """Envía a la IA la última secuencia manual lista."""
+        if self._analysis_thread is not None and self._analysis_thread.is_alive():
+            return False, "Hay un análisis en curso."
+        with self._manual_lock:
+            jpeg_frames = list(self._manual_frames)
+        if len(jpeg_frames) != settings.MANUAL_CAPTURE_FRAMES:
+            return False, f"Primero captura los {settings.MANUAL_CAPTURE_FRAMES} fotogramas."
+
+        event = EventModel(
+            id=str(uuid.uuid4()),
+            camera_id="CAM_001",
+            started_at=datetime.now(),
+            status="created",
+            local_detection=LocalDetectionSummary(),
+        )
+        system_state.set_active_event(True)
+        system_state.set_manual_sequence_status(captured=len(jpeg_frames), ready=False)
+        self._analysis_thread = threading.Thread(
+            target=self._process_event,
+            args=(event, jpeg_frames, True),
+            name=f"ManualAnalysis-{event.id[:8]}",
+            daemon=True,
+        )
+        self._analysis_thread.start()
+        return True, "Imágenes enviadas a la IA."
+
+    def _capture_manual_sequence(self) -> None:
+        """Guarda la imagen actual cada 1.5 segundos y publica una vista previa."""
+        captured = []
+        preview_urls = []
+        total = settings.MANUAL_CAPTURE_FRAMES
+        interval = settings.MANUAL_CAPTURE_INTERVAL_SECONDS
+        preview_dir = settings.DATA_DIR / "frames"
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        system_state.add_log("SEQUENCE", f"[MANUAL] Capturando {total} fotogramas, uno cada {interval:g}s.")
+
+        for index in range(total):
+            if self._stop_event.is_set():
+                return
+            with self._frame_lock:
+                frame = None if self._current_frame is None else self._current_frame.copy()
+            if frame is None:
+                system_state.add_log("ERROR", "[MANUAL] No se pudo obtener un fotograma de la cámara.")
+                system_state.set_manual_sequence_status(captured=len(captured), ready=False)
+                return
+
+            jpeg_bytes = self._image_processor.compress_jpeg(frame)
+            captured.append(jpeg_bytes)
+            preview_name = f"manual-preview-{uuid.uuid4().hex}-{index + 1}.jpg"
+            (preview_dir / preview_name).write_bytes(jpeg_bytes)
+            preview_urls.append(f"/api/cameras/analysis-preview/{preview_name}")
+            system_state.set_analysis_preview_urls(preview_urls)
+            system_state.set_manual_sequence_status(captured=len(captured), ready=False)
+            system_state.add_log("SEQUENCE", f"[MANUAL] Fotograma {index + 1}/{total} capturado.")
+            if index < total - 1:
+                time.sleep(interval)
+
+        with self._manual_lock:
+            self._manual_frames = captured
+        system_state.set_manual_sequence_status(captured=total, ready=True)
+        system_state.add_log("SEQUENCE", "[MANUAL] Secuencia lista. Presiona 'Enviar imágenes a IA'.")
 
     def switch_source(self, new_source: str) -> bool:
         """
@@ -216,12 +306,15 @@ class VideoPipelineWorker:
             detection = self._detector.detect_persons(frame)
             system_state.set_persons_detected(detection.persons)
 
-            # Actualizar tiempo de cooldown restante en el estado
-            cooldown_rem = self._event_manager.cooldown_manager.remaining_seconds()
-            system_state.set_cooldown_remaining(cooldown_rem)
+            # Durante pruebas manuales no se usa cooldown ni se dispara análisis por detección.
+            if settings.MANUAL_RECOGNITION_MODE:
+                system_state.set_cooldown_remaining(0.0)
+            else:
+                cooldown_rem = self._event_manager.cooldown_manager.remaining_seconds()
+                system_state.set_cooldown_remaining(cooldown_rem)
 
             # Evaluar si se debe disparar un evento
-            if self._event_manager.should_trigger_event(detection):
+            if not settings.MANUAL_RECOGNITION_MODE and self._event_manager.should_trigger_event(detection):
                 event = self._event_manager.create_event(detection)
                 system_state.set_active_event(True)
                 system_state.add_log(
@@ -244,7 +337,7 @@ class VideoPipelineWorker:
             self._camera.close()
             self._camera = None
 
-    def _process_event(self, event) -> None:
+    def _process_event(self, event, manual_jpeg_frames=None, is_manual: bool = False) -> None:
         """
         Procesa un evento completo: captura → selección → compresión → IA → decisión → voz.
         Se ejecuta en un hilo separado para que la captura de cámara nunca se congele
@@ -253,47 +346,28 @@ class VideoPipelineWorker:
         try:
             logger.info(f"Procesando evento {event.id[:8]}...")
 
-            # 2. Capturar una secuencia posterior a la deteccion, sin incluir contexto previo.
-            interval = settings.SEQUENCE_FRAME_INTERVAL_SECONDS
-            capture_seconds = max(
-                settings.EVENT_CAPTURE_SECONDS,
-                settings.FRAMES_PER_ANALYSIS * interval,
-            )
-            system_state.add_log(
-                "SEQUENCE",
-                f"[SECUENCIA] Capturando {settings.FRAMES_PER_ANALYSIS} fotogramas, uno cada {interval:g}s durante {capture_seconds:g}s."
-            )
-            time.sleep(capture_seconds)
-
-            # 3. Seleccionar cada muestra a partir del segundo posterior a la deteccion.
-            selected = self._frame_buffer.get_frames_at_intervals(
-                start_time=event.started_at,
-                interval_seconds=interval,
-                count=settings.FRAMES_PER_ANALYSIS,
-            )
+            if is_manual:
+                jpeg_frames = list(manual_jpeg_frames or [])
+                system_state.add_log("SEQUENCE", f"[MANUAL] {len(jpeg_frames)} fotogramas preparados para consultar a la IA.")
+            else:
+                interval = settings.SEQUENCE_FRAME_INTERVAL_SECONDS
+                capture_seconds = max(settings.EVENT_CAPTURE_SECONDS, settings.FRAMES_PER_ANALYSIS * interval)
+                system_state.add_log(
+                    "SEQUENCE",
+                    f"[SECUENCIA] Capturando {settings.FRAMES_PER_ANALYSIS} fotogramas, uno cada {interval:g}s durante {capture_seconds:g}s."
+                )
+                time.sleep(capture_seconds)
+                selected = self._frame_buffer.get_frames_at_intervals(
+                    start_time=event.started_at,
+                    interval_seconds=interval,
+                    count=settings.FRAMES_PER_ANALYSIS,
+                )
+                jpeg_frames = [self._image_processor.compress_jpeg(frame) for _, frame in selected]
 
             # 4. Actualizar metadata de captura
-            event.capture.total_frames = len(selected)
-            event.capture.selected_frames = len(selected)
+            event.capture.total_frames = len(jpeg_frames)
+            event.capture.selected_frames = len(jpeg_frames)
             event.capture.jpeg_quality = settings.JPEG_QUALITY
-
-            # 5. Comprimir frames a JPEG binario (ImageProcessor solo procesa imagen)
-            jpeg_frames = []
-            preview_urls = []
-            preview_dir = settings.DATA_DIR / "frames"
-            preview_dir.mkdir(parents=True, exist_ok=True)
-            for index, (_, frame) in enumerate(selected, start=1):
-                jpeg_bytes = self._image_processor.compress_jpeg(frame)
-                jpeg_frames.append(jpeg_bytes)
-                preview_name = f"ai-preview-{event.id}-{index}.jpg"
-                (preview_dir / preview_name).write_bytes(jpeg_bytes)
-                preview_urls.append(f"/api/cameras/analysis-preview/{preview_name}")
-
-            system_state.set_analysis_preview_urls(preview_urls)
-            system_state.add_log(
-                "SEQUENCE",
-                f"[SECUENCIA] {len(jpeg_frames)} fotogramas preparados para consultar a la IA."
-            )
 
             # 6. Enviar a VisionAIClient midiendo tiempo exacto de respuesta
             system_state.set_ai_status("sending")
@@ -346,15 +420,24 @@ class VideoPipelineWorker:
                     system_state.add_log("AUDIO", "[AUDIO] Advertencia finalizada y archivada en formato WAV.")
 
             # 10. Completar y guardar evento
-            completed_event = self._event_manager.complete_event(event)
+            if is_manual:
+                event.ended_at = datetime.now()
+                event.status = "completed"
+                completed_event = event
+            else:
+                completed_event = self._event_manager.complete_event(event)
             self._repository.save(completed_event)
-            system_state.add_log("COOLDOWN", f"[ENFRIAMIENTO] Periodo de {settings.EVENT_COOLDOWN_SECONDS}s activado para evitar spam.")
+            if not is_manual:
+                system_state.add_log("COOLDOWN", f"[ENFRIAMIENTO] Periodo de {settings.EVENT_COOLDOWN_SECONDS}s activado para evitar spam.")
             logger.info(f"Evento {event.id[:8]} completado → decisión: {decision}")
 
         except Exception as e:
             logger.error(f"Error procesando evento: {e}")
-            self._event_manager.release_event(event)
+            if not is_manual:
+                self._event_manager.release_event(event)
         finally:
+            if is_manual:
+                system_state.set_manual_sequence_status(captured=0, ready=False)
             if self._event_manager.active_event is None:
                 system_state.set_active_event(False)
             if self._analysis_thread is threading.current_thread():

@@ -57,6 +57,9 @@ class SystemStatusModel(BaseModel):
     frames_per_analysis: int = Field(5, description="Número de fotogramas enviados por análisis.")
     total_events_processed: int = Field(0, description="Contador histórico de eventos analizados en la sesión.")
     analysis_preview_urls: List[str] = Field(default_factory=list, description="Rutas de los fotogramas preparados para la consulta actual o más reciente a la IA.")
+    manual_recognition_mode: bool = Field(False, description="Captura y envío controlados desde la interfaz.")
+    manual_frames_captured: int = Field(0, description="Fotogramas capturados de la secuencia manual actual.")
+    manual_sequence_ready: bool = Field(False, description="La secuencia manual está lista para análisis.")
     logs: List[Dict[str, str]] = Field(default_factory=list, description="Lista de logs recientes del sistema.")
 
 
@@ -86,6 +89,9 @@ class SystemState:
         self._frames_per_analysis = settings.FRAMES_PER_ANALYSIS
         self._total_events_processed = 0
         self._analysis_preview_urls: List[str] = []
+        self._manual_recognition_mode = settings.MANUAL_RECOGNITION_MODE
+        self._manual_frames_captured = 0
+        self._manual_sequence_ready = False
         self._logs = deque(maxlen=100)
 
         # Log inicial de arranque
@@ -135,6 +141,9 @@ class SystemState:
                 "frames_per_analysis": self._frames_per_analysis,
                 "total_events_processed": self._total_events_processed,
                 "analysis_preview_urls": list(self._analysis_preview_urls),
+                "manual_recognition_mode": self._manual_recognition_mode,
+                "manual_frames_captured": self._manual_frames_captured,
+                "manual_sequence_ready": self._manual_sequence_ready,
                 "logs": list(self._logs)
             }
 
@@ -173,6 +182,12 @@ class SystemState:
         """Publica los fotogramas JPEG seleccionados para su vista previa en el dashboard."""
         with self._lock:
             self._analysis_preview_urls = list(urls)
+
+    def set_manual_sequence_status(self, captured: int, ready: bool) -> None:
+        """Actualiza el avance de la secuencia manual visible en el panel."""
+        with self._lock:
+            self._manual_frames_captured = captured
+            self._manual_sequence_ready = ready
 
     def record_analysis_result(
         self,

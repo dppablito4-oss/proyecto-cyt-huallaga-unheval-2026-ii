@@ -1,5 +1,6 @@
-# Documentación Técnica y Arquitectura del Sistema — Huallaga AI Monitor (v0.1)
+# Documentación Técnica y Arquitectura del Sistema — SIVARH (v0.1)
 
+**Proyecto:** SIVARH: Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga orientado a la detección preventiva del arrojo directo de residuos sólidos, sector Puente Huallaga – UNHEVAL.  
 **Investigación sobre la Problemática del Arrojo de Residuos Sólidos en las Riberas del Río Huallaga y Estrategias Preventivas Basadas en Inteligencia Artificial**  
 *Universidad Nacional Hermilio Valdizán (UNHEVAL) — Facultad de Ingeniería / Proyecto de Investigación Aplicada CyT (2026-II)*
 
@@ -47,7 +48,7 @@ El foco prioritario de intervención se ubica en el corredor de alta fricción u
 ### 1.3. Delimitación Rigurosa de las Fuentes de Contaminación
 Para salvaguardar el rigor científico y evitar falsas pretensiones tecno-solucionistas, el proyecto delimita estrictamente las fuentes documentadas:
 
-| Fuente de Contaminación | Descripción | Alcance de Huallaga AI Monitor |
+| Fuente de Contaminación | Descripción | Alcance de SIVARH |
 | :--- | :--- | :--- |
 | **1. Disposición directa por personas (*Littering*)** | Arrojo intencional o negligente de botellas, bolsas y envoltorios por peatones, estudiantes y conductores. | **🎯 ENFOQUE EXCLUSIVO DEL PROYECTO.** |
 | **2. Residuos transportados por la corriente** | Plásticos arrastrados desde cuencas altas o distritos vecinos por lluvia y caudal. | Fuera de alcance (requiere infraestructura hidráulica/dragado). |

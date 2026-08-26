@@ -1,5 +1,5 @@
 """
-Script lanzador principal para Huallaga AI Monitor
+Script lanzador principal de SIVARH
 ==================================================
 Ejecuta el servidor backend FastAPI y sirve el dashboard web.
 """

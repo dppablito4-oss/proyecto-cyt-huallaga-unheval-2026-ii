@@ -35,6 +35,6 @@ def get_system_status(state: SystemState = Depends(get_system_state)):
 def health_check():
     """
     Sonda básica de disponibilidad HTTP (Health Check).
-    Retorna `{ status: 'ok', service: 'Huallaga AI Monitor' }`.
+    Retorna `{ status: 'ok', service: 'SIVARH' }`.
     """
-    return {"status": "ok", "service": "Huallaga AI Monitor"}
+    return {"status": "ok", "service": "SIVARH"}

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Huallaga AI Monitor</title>
+  <title>SIVARH</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,8 +14,8 @@
     <header class="main-header">
       <div>
         <p class="eyebrow">UNHEVAL 2026</p>
-        <h1>Huallaga AI Monitor</h1>
-        <p class="subtitle">Monitoreo preventivo de residuos en el Rio Huallaga</p>
+        <h1>SIVARH</h1>
+        <p class="subtitle">Vigilancia ambiental preventiva — sector Puente Huallaga, UNHEVAL</p>
       </div>
       <div class="header-controls">
         <label class="camera-control" for="camera-source-select">Camara
@@ -25,7 +25,9 @@
             <option value="2">Camara 2</option>
           </select>
         </label>
-        <button class="btn btn-primary" id="btn-start-pipeline">Iniciar</button>
+        <button class="btn btn-quiet" id="btn-start-pipeline">Iniciar cámara</button>
+        <button class="btn btn-primary" id="btn-start-manual-recognition">Iniciar reconocimiento</button>
+        <button class="btn btn-secondary" id="btn-send-manual-images" disabled>Enviar imágenes a IA</button>
         <button class="btn btn-danger" id="btn-stop-pipeline">Detener</button>
         <button class="btn btn-secondary" id="btn-test-speech">Probar voz</button>
       </div>
@@ -51,13 +53,13 @@
           <div class="panel-heading"><h2>Estado de la deteccion</h2><span class="decision-badge" id="last-decision-badge">En espera</span></div>
           <div class="metrics-grid">
             <div><span class="muted-label">Personas detectadas</span><strong id="persons-count">0</strong></div>
-            <div><span class="muted-label">Tiempo de espera</span><strong id="cooldown-status">Listo</strong></div>
+            <div><span class="muted-label">Modo de reconocimiento</span><strong id="cooldown-status">Manual</strong></div>
             <div><span class="muted-label">Estado de IA</span><strong id="ai-status-text">En reposo</strong></div>
             <div><span class="muted-label">Respuesta de IA</span><strong id="ai-latency-text">-- s</strong></div>
           </div>
           <div class="result-row">
             <span class="muted-label">Ultimo diagnostico</span>
-            <p id="last-diagnosis-text">Esperando una deteccion para iniciar el analisis.</p>
+            <p id="last-diagnosis-text">Captura una secuencia manual para iniciar el análisis.</p>
           </div>
           <div class="result-row warning-row">
             <span class="muted-label">Ultima advertencia</span>
@@ -70,12 +72,12 @@
         <div class="panel-heading"><div><h2>Registro en tiempo real</h2><p class="panel-note">La secuencia se muestra antes de enviarla a la IA.</p></div><button class="btn btn-quiet" id="btn-clear-logs">Limpiar</button></div>
         <section class="sequence-section" aria-live="polite">
           <div class="sequence-heading"><span>Secuencia preparada para IA</span><span id="sequence-status-text">Aun no hay una secuencia</span></div>
-          <div id="analysis-preview" class="analysis-preview"><p>Las imagenes seleccionadas apareceran aqui cuando se detecte una persona.</p></div>
+          <div id="analysis-preview" class="analysis-preview"><p>Presiona “Iniciar reconocimiento” para capturar cuatro imágenes.</p></div>
         </section>
         <div class="terminal-container" id="live-logs-container" aria-label="Registros del sistema">
           <div class="log-line log-INFO"><span class="log-time">[--:--:--]</span><span class="log-text">Interfaz lista. Esperando actividad.</span></div>
         </div>
-        <div class="terminal-footer"><span id="log-count-text">0 registros</span><span id="cooldown-footer">Tiempo de espera: listo</span></div>
+        <div class="terminal-footer"><span id="log-count-text">0 registros</span><span id="cooldown-footer">Modo manual: listo para capturar</span></div>
       </section>
     </main>
   </div>

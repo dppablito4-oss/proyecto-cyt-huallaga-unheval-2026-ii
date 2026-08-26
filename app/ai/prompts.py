@@ -42,6 +42,6 @@ def load_system_prompt(prompt_path: Optional[Path] = None) -> str:
 
     # Mensaje de fallback básico
     return (
-        "Eres un sistema inteligente de vigilancia ambiental en la ribera del río Huallaga. "
+        "Eres SIVARH, un sistema inteligente de vigilancia ambiental para las riberas del río Huallaga, sector Puente Huallaga – UNHEVAL. "
         "Analiza la secuencia cronológica de fotogramas e identifica posibles conductas de arrojo de residuos."
     )

@@ -47,7 +47,7 @@ logger = logging.getLogger("HuallagaAIMonitor")
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Sistema inteligente de vigilancia ambiental para la detección preventiva del arrojo de residuos sólidos en la ribera del río Huallaga."
+    description="SIVARH: Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga orientado a la detección preventiva del arrojo directo de residuos sólidos, sector Puente Huallaga – UNHEVAL."
 )
 
 # Habilitar CORS (Cross-Origin Resource Sharing) para facilitar pruebas y desarrollo
@@ -97,7 +97,7 @@ async def shutdown_event():
     Detiene el worker de captura y libera recursos de cámara.
     """
     pipeline_worker.stop()
-    logger.info("Apagando Huallaga AI Monitor y liberando recursos...")
+    logger.info("Apagando SIVARH y liberando recursos...")
 
 
 if __name__ == "__main__":
@@ -108,4 +108,3 @@ if __name__ == "__main__":
         port=settings.PORT,
         reload=settings.DEBUG,
     )
-
