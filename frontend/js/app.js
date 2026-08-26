@@ -132,6 +132,38 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const alertModal = document.getElementById('alert-confirmation-modal');
+  const emitAlertBtn = document.getElementById('btn-emit-alert');
+  const dismissAlertBtn = document.getElementById('btn-dismiss-alert');
+  const alertVoiceSummary = document.getElementById('alert-modal-voice-summary');
+  const alertEmissionStatus = document.getElementById('alert-emission-status');
+  const updateAlertVoiceSummary = () => {
+    if (alertVoiceSummary) alertVoiceSummary.textContent = `Voz: ${speechVoice?.value || 'onyx'} · Velocidad: ${Number(speechSpeed?.value || 1.1).toFixed(2)}x`;
+  };
+  speechVoice?.addEventListener('change', updateAlertVoiceSummary);
+  speechSpeed?.addEventListener('input', updateAlertVoiceSummary);
+  updateAlertVoiceSummary();
+  dismissAlertBtn?.addEventListener('click', () => Dashboard.dismissPendingAlert());
+  alertModal?.addEventListener('click', (event) => {
+    if (event.target === alertModal) Dashboard.dismissPendingAlert();
+  });
+  emitAlertBtn?.addEventListener('click', async () => {
+    emitAlertBtn.disabled = true;
+    dismissAlertBtn.disabled = true;
+    emitAlertBtn.textContent = 'Emitiendo...';
+    if (alertEmissionStatus) alertEmissionStatus.textContent = 'Generando la voz y reproduciendo por el altavoz...';
+    const result = await API.emitManualAlert(speechVoice?.value || 'onyx', Number(speechSpeed?.value || 1.1));
+    if (result?.accepted) {
+      if (alertEmissionStatus) alertEmissionStatus.textContent = 'Alerta emitida correctamente.';
+      Dashboard.dismissPendingAlert();
+    } else if (alertEmissionStatus) {
+      alertEmissionStatus.textContent = result?.message || 'No se pudo emitir la alerta.';
+    }
+    emitAlertBtn.disabled = false;
+    dismissAlertBtn.disabled = false;
+    emitAlertBtn.textContent = 'Emitir alerta';
+  });
+
   // 6. Botón: Limpiar consola de logs
   const clearLogsBtn = document.getElementById('btn-clear-logs');
   if (clearLogsBtn) {

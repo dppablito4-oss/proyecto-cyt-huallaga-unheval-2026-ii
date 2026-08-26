@@ -13,9 +13,24 @@ Endpoints:
 - `POST /api/system/stop`: Detiene o pausa la captura y procesamiento de video.
 """
 
+from datetime import datetime
+from typing import Literal
+
 from fastapi import APIRouter
+from pydantic import BaseModel, Field
+
+from app.speech.audio_output import LocalSpeakerOutput
+from app.speech.openai_tts import OpenAISpeechService
+from app.state import system_state
 
 router = APIRouter(prefix="/system")
+
+
+class ManualAlertRequest(BaseModel):
+    """Voz elegida en el dashboard para emitir la advertencia preparada por Luna."""
+
+    voice: Literal["alloy", "ash", "echo", "fable", "nova", "onyx", "sage", "shimmer"] = "onyx"
+    speed: float = Field(default=1.1, ge=0.75, le=1.35)
 
 
 @router.post("/start", summary="Iniciar el pipeline de captura y procesamiento de video")
@@ -77,3 +92,33 @@ def send_manual_images():
 
     accepted, message = pipeline_worker.analyze_manual_sequence()
     return {"accepted": accepted, "message": message}
+
+
+@router.post("/manual/emit-alert", summary="Emitir la advertencia preparada por Luna")
+def emit_manual_alert(payload: ManualAlertRequest):
+    """Reproduce el mensaje de la última decisión WARN con la voz seleccionada."""
+    snapshot = system_state.to_dict()
+    warning_message = snapshot.get("last_warning_message")
+    if not snapshot.get("alert_pending") or not warning_message:
+        return {"accepted": False, "message": "No hay una alerta pendiente de emisión."}
+
+    system_state.add_log(
+        "AUDIO",
+        f"[VOZ] Emisión manual solicitada (voz={payload.voice}, velocidad={payload.speed:.2f}x): \"{warning_message}\""
+    )
+    service = OpenAISpeechService(voice=payload.voice, speed=payload.speed)
+    output_path = f"data/audio/manual_alert_{datetime.now():%Y%m%d_%H%M%S}.wav"
+    generated = service.generate_and_play_streaming(warning_message, output_path, LocalSpeakerOutput())
+    if not generated:
+        system_state.add_log("WARN", "[AUDIO] No se pudo emitir la advertencia manual.")
+        return {"accepted": False, "message": "No se pudo generar o reproducir la advertencia."}
+
+    system_state.mark_alert_emitted()
+    system_state.add_log("AUDIO", "[AUDIO] Advertencia manual emitida correctamente.")
+    return {
+        "accepted": True,
+        "message": "Advertencia emitida correctamente.",
+        "voice": payload.voice,
+        "speed": payload.speed,
+        "warning_message": warning_message,
+    }

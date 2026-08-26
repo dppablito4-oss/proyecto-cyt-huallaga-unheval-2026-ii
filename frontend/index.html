@@ -120,6 +120,20 @@
       </section>
     </main>
   </div>
+  <div id="alert-confirmation-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="alert-modal-title" hidden>
+    <section class="alert-modal">
+      <p class="eyebrow alert-eyebrow">Alerta preparada por Luna</p>
+      <h2 id="alert-modal-title">Residuos detectados</h2>
+      <p class="alert-modal-note">Revisa el mensaje antes de reproducirlo por el altavoz.</p>
+      <blockquote id="alert-modal-message">Esperando el mensaje de advertencia.</blockquote>
+      <p id="alert-modal-voice-summary" class="alert-voice-summary">Se usará la voz y velocidad seleccionadas.</p>
+      <div class="alert-modal-actions">
+        <button class="btn btn-quiet" id="btn-dismiss-alert">Ahora no</button>
+        <button class="btn btn-alert" id="btn-emit-alert">Emitir alerta</button>
+      </div>
+      <p id="alert-emission-status" class="form-status" aria-live="polite"></p>
+    </section>
+  </div>
   <script src="js/api.js"></script>
   <script src="js/websocket.js"></script>
   <script src="js/dashboard.js"></script>

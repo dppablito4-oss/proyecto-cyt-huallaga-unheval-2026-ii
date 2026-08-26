@@ -393,7 +393,8 @@ class VideoPipelineWorker:
             event.decision = decision
 
             if decision == "WARN":
-                system_state.add_log("WARN", f"[ALERTA] ¡Arrojo de residuos confirmado! Decisión: WARN")
+                pending_text = " Alerta pendiente de emisión manual." if is_manual else ""
+                system_state.add_log("WARN", f"[ALERTA] ¡Arrojo de residuos confirmado! Decisión: WARN.{pending_text}")
             elif decision == "LOG_ONLY":
                 system_state.add_log("DECISION", f"[DECISIÓN] LOG_ONLY (Registrado para auditoría e investigación).")
             else:
@@ -409,7 +410,7 @@ class VideoPipelineWorker:
             )
 
             # 9. Si la decisión es WARN, generar voz y reproducir
-            if decision == "WARN" and ai_result.warning_message:
+            if decision == "WARN" and ai_result.warning_message and not is_manual:
                 system_state.add_log("AUDIO", f"[VOZ] Sintetizando advertencia: \"{ai_result.warning_message}\"")
                 system_state.add_log("AUDIO", "[AUDIO] Recibiendo PCM y reproduciendo advertencia en streaming...")
                 audio_path = f"data/audio/warning_{event.id[:8]}.wav"

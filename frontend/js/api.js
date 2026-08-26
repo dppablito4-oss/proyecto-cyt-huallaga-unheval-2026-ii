@@ -183,6 +183,21 @@ const API = {
     }
   },
 
+  async emitManualAlert(voice, speed) {
+    try {
+      const res = await fetch('/api/system/manual/emit-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voice, speed })
+      });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error('Error al emitir la alerta manual:', e);
+      return null;
+    }
+  },
+
   async exportEvidencePdf() {
     try {
       const res = await fetch('/api/reports/evidence.pdf');

@@ -2,6 +2,8 @@ const Dashboard = {
   lastLogsCount: 0,
   lastLogsSignature: '',
   previewKey: '',
+  pendingAlertKey: '',
+  dismissedAlertKey: '',
 
   updateStatus(data) {
     if (!data) return;
@@ -18,6 +20,7 @@ const Dashboard = {
     this.setText('last-diagnosis-text', data.last_diagnosis || 'Captura una secuencia manual para iniciar el análisis.');
     this.setText('warning-text', data.last_warning_message || 'Sin advertencias emitidas.');
     this.renderPreview(data.analysis_preview_urls || [], data.ai_status);
+    this.updatePendingAlert(data);
 
     if (Array.isArray(data.logs)) this.renderLogs(data.logs);
   },
@@ -107,9 +110,31 @@ const Dashboard = {
   updateDecision(decision) {
     const badge = document.getElementById('last-decision-badge');
     if (!badge) return;
-    const labels = { WARN: 'Alerta emitida', LOG_ONLY: 'Registrado', IGNORE: 'Sin alerta' };
+    const labels = { WARN: 'Alerta detectada', LOG_ONLY: 'Registrado', IGNORE: 'Sin alerta' };
     badge.textContent = labels[decision] || 'En espera';
     badge.className = `decision-badge ${decision === 'WARN' ? 'warn' : decision === 'LOG_ONLY' ? 'log-only' : 'ignore'}`;
+  },
+
+  updatePendingAlert(data) {
+    const modal = document.getElementById('alert-confirmation-modal');
+    const message = document.getElementById('alert-modal-message');
+    if (!modal || !message) return;
+
+    const key = `${data.last_event_time || ''}|${data.last_warning_message || ''}`;
+    this.pendingAlertKey = data.alert_pending ? key : '';
+    message.textContent = data.last_warning_message || 'Luna no generó un mensaje de advertencia.';
+    if (data.alert_pending && key !== this.dismissedAlertKey) {
+      modal.hidden = false;
+      document.getElementById('btn-emit-alert')?.focus();
+    } else if (!data.alert_pending) {
+      modal.hidden = true;
+    }
+  },
+
+  dismissPendingAlert() {
+    this.dismissedAlertKey = this.pendingAlertKey;
+    const modal = document.getElementById('alert-confirmation-modal');
+    if (modal) modal.hidden = true;
   },
 
   renderPreview(urls, aiStatus) {

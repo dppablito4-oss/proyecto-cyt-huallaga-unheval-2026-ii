@@ -60,6 +60,7 @@ class SystemStatusModel(BaseModel):
     manual_recognition_mode: bool = Field(False, description="Captura y envío controlados desde la interfaz.")
     manual_frames_captured: int = Field(0, description="Fotogramas capturados de la secuencia manual actual.")
     manual_sequence_ready: bool = Field(False, description="La secuencia manual está lista para análisis.")
+    alert_pending: bool = Field(False, description="Hay una advertencia de Luna pendiente de emisión manual.")
     logs: List[Dict[str, str]] = Field(default_factory=list, description="Lista de logs recientes del sistema.")
 
 
@@ -92,6 +93,7 @@ class SystemState:
         self._manual_recognition_mode = settings.MANUAL_RECOGNITION_MODE
         self._manual_frames_captured = 0
         self._manual_sequence_ready = False
+        self._alert_pending = False
         self._logs = deque(maxlen=100)
 
         # Log inicial de arranque
@@ -144,6 +146,7 @@ class SystemState:
                 "manual_recognition_mode": self._manual_recognition_mode,
                 "manual_frames_captured": self._manual_frames_captured,
                 "manual_sequence_ready": self._manual_sequence_ready,
+                "alert_pending": self._alert_pending,
                 "logs": list(self._logs)
             }
 
@@ -203,9 +206,15 @@ class SystemState:
             self._last_decision = decision
             self._last_diagnosis = diagnosis
             self._last_warning_message = warning_message
+            self._alert_pending = decision == "WARN" and bool(warning_message)
             if latency is not None:
                 self._ai_latency = latency
             self._total_events_processed += 1
+
+    def mark_alert_emitted(self) -> None:
+        """Marca como atendida la advertencia que estaba pendiente de emisión manual."""
+        with self._lock:
+            self._alert_pending = False
 
 
 # Instancia global accesible en toda la aplicación (Singleton)
