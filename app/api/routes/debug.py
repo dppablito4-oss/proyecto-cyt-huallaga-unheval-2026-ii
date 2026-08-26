@@ -14,8 +14,11 @@ Endpoints:
 - `POST /api/debug/test-analysis`: Prueba el análisis multimodal de visión con fotogramas sintéticos o del buffer.
 """
 
+import logging
+from datetime import datetime
+
 import numpy as np
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
 from app.speech.openai_tts import OpenAISpeechService
@@ -26,6 +29,7 @@ from app.events.rules import DecisionEngine
 from app.config import settings
 
 router = APIRouter(prefix="/debug")
+logger = logging.getLogger(__name__)
 
 
 class SpeechTestRequest(BaseModel):
@@ -44,6 +48,20 @@ class SpeechTestRequest(BaseModel):
         le=4.0,
         description="Velocidad de reproducción/síntesis, entre 0.25 y 4.0."
     )
+
+
+class EventSpeechTestRequest(BaseModel):
+    """Descripción de un evento para que Luna redacte y reproduzca un guion de prueba."""
+
+    event_description: str = Field(min_length=5, max_length=500)
+    voice: Optional[str] = Field(default=None)
+    speed: Optional[float] = Field(default=None, ge=0.75, le=1.35)
+
+
+class GeneratedWarningScript(BaseModel):
+    """Respuesta estructurada del generador textual de guiones."""
+
+    script: str = Field(min_length=5, max_length=300)
 
 
 class AnalysisTestRequest(BaseModel):
@@ -79,6 +97,60 @@ def test_speech(payload: SpeechTestRequest):
         "audio_generated": result is not None,
         "audio_path": result,
         "played_locally": result is not None
+    }
+
+
+@router.post("/generate-event-speech", summary="Generar con Luna y reproducir un guion desde un evento descrito")
+def generate_event_speech(payload: EventSpeechTestRequest):
+    """Convierte una descripción textual de prueba en un guion comunitario y lo envía al TTS."""
+    if not settings.OPENAI_API_KEY:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY no está configurada.")
+
+    prompt_path = settings.PROMPTS_DIR / "warning_script_from_event.txt"
+    try:
+        from openai import OpenAI
+
+        system_prompt = prompt_path.read_text(encoding="utf-8").strip()
+        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        response = client.beta.chat.completions.parse(
+            model=settings.OPENAI_VISION_MODEL,
+            reasoning_effort=settings.OPENAI_VISION_REASONING_EFFORT,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": f"Evento descrito para la prueba: {payload.event_description}",
+                },
+            ],
+            response_format=GeneratedWarningScript,
+        )
+        parsed = response.choices[0].message.parsed
+        if parsed is None or not parsed.script.strip():
+            raise ValueError("Luna no devolvió un guion válido.")
+        script = parsed.script.strip()
+    except Exception as exc:
+        logger.error("Error al generar el guion de prueba con Luna: %s", exc)
+        raise HTTPException(status_code=502, detail="Luna no pudo generar el guion de prueba.") from exc
+
+    from app.state import system_state
+
+    system_state.add_log("AI", f"[GUION IA] Luna generó: \"{script}\"")
+    service = OpenAISpeechService(voice=payload.voice, speed=payload.speed)
+    output_path = f"data/audio/test_event_{datetime.now():%Y%m%d_%H%M%S}.wav"
+    result = service.generate_and_play_streaming(script, output_path, LocalSpeakerOutput())
+    if result is None:
+        raise HTTPException(status_code=502, detail="El guion fue generado, pero el TTS no pudo reproducirlo.")
+
+    system_state.add_log("AUDIO", f"[AUDIO] Guion de prueba reproducido (voz={service.voice}, velocidad={service.speed:.2f}x).")
+    return {
+        "event_description": payload.event_description,
+        "generated_script": script,
+        "model": settings.OPENAI_VISION_MODEL,
+        "voice": service.voice,
+        "speed": service.speed,
+        "audio_generated": True,
+        "audio_path": result,
+        "played_locally": True,
     }
 
 

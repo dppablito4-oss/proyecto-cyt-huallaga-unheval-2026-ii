@@ -68,19 +68,11 @@
 
         <section class="panel speech-panel">
           <div class="panel-heading">
-            <div><p class="eyebrow">Configuración de voz</p><h2>Prueba de voz ambiental</h2><p class="panel-note">Selecciona un mensaje, una voz y el ritmo antes de reproducirlo.</p></div>
+            <div><p class="eyebrow">Guion generado por Luna</p><h2>Prueba de voz desde un evento</h2><p class="panel-note">Describe una situación y Luna redactará el mensaje que escuchará el TTS.</p></div>
           </div>
           <div class="speech-form">
-            <label for="speech-preset">Mensaje preestablecido</label>
-            <select id="speech-preset">
-              <option value="attention">Advertencia general</option>
-              <option value="waste">Abandono de residuos</option>
-              <option value="bottle">Botella o recipiente</option>
-              <option value="urgent">Advertencia urgente</option>
-            </select>
-
-            <label for="speech-text">Texto que leerá SIVARH</label>
-            <textarea id="speech-text" rows="3" maxlength="240">Atención. Se ha detectado el abandono de residuos en el suelo. Por favor, recójalos y deposítelos en un contenedor adecuado.</textarea>
+            <label for="speech-event-description">Describe el evento de prueba</label>
+            <textarea id="speech-event-description" rows="3" maxlength="500" placeholder="Ejemplo: Una persona dejó una botella plástica en el suelo cerca de la ribera y se alejó."></textarea>
 
             <div class="speech-options">
               <label for="speech-voice">Voz
@@ -100,8 +92,12 @@
               </label>
             </div>
             <div class="speech-actions">
-              <button class="btn btn-primary" id="btn-test-speech">Reproducir prueba</button>
-              <span id="speech-test-status" class="form-status" aria-live="polite">Listo para probar.</span>
+              <button class="btn btn-primary" id="btn-test-speech">Generar guion y reproducir</button>
+              <span id="speech-test-status" class="form-status" aria-live="polite">Describe un evento para comenzar.</span>
+            </div>
+            <div id="speech-generated-result" class="generated-script" hidden>
+              <span class="muted-label">Guion generado por Luna</span>
+              <p id="speech-generated-text"></p>
             </div>
           </div>
         </section>

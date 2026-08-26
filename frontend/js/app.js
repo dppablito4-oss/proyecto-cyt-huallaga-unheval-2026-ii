@@ -96,25 +96,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 5. Panel de prueba de voz TTS: mensaje, voz y velocidad
+  // 5. Panel de prueba: Luna genera un guion desde una descripción y lo envía al TTS
   const testSpeechBtn = document.getElementById('btn-test-speech');
-  const speechPreset = document.getElementById('speech-preset');
-  const speechText = document.getElementById('speech-text');
+  const speechEventDescription = document.getElementById('speech-event-description');
   const speechVoice = document.getElementById('speech-voice');
   const speechSpeed = document.getElementById('speech-speed');
   const speechSpeedValue = document.getElementById('speech-speed-value');
   const speechTestStatus = document.getElementById('speech-test-status');
-  const speechMessages = {
-    attention: 'Atención. Se ha detectado una conducta que puede afectar el entorno. Por favor, mantenga limpia la ribera del río Huallaga.',
-    waste: 'Atención. Se ha detectado el abandono de residuos en el suelo. Por favor, recójalos y deposítelos en un contenedor adecuado.',
-    bottle: 'Atención. Se ha detectado el abandono de una botella o recipiente. Por favor, recójalo y deposítelo en un contenedor autorizado.',
-    urgent: 'Atención. Arrojar residuos está prohibido. Detenga esta acción, recoja el residuo y deposítelo correctamente.'
-  };
-  if (speechPreset && speechText) {
-    speechPreset.addEventListener('change', () => {
-      speechText.value = speechMessages[speechPreset.value] || speechMessages.attention;
-    });
-  }
+  const speechGeneratedResult = document.getElementById('speech-generated-result');
+  const speechGeneratedText = document.getElementById('speech-generated-text');
   if (speechSpeed && speechSpeedValue) {
     const updateSpeedLabel = () => { speechSpeedValue.value = `${Number(speechSpeed.value).toFixed(2)}x`; };
     speechSpeed.addEventListener('input', updateSpeedLabel);
@@ -122,13 +112,26 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if (testSpeechBtn) {
     testSpeechBtn.addEventListener('click', async () => {
+      const eventDescription = speechEventDescription?.value.trim();
+      if (!eventDescription) {
+        speechEventDescription?.focus();
+        if (speechTestStatus) speechTestStatus.textContent = 'Describe primero el evento de prueba.';
+        return;
+      }
       testSpeechBtn.disabled = true;
-      testSpeechBtn.textContent = 'Sintetizando...';
-      if (speechTestStatus) speechTestStatus.textContent = 'Generando y reproduciendo...';
-      const result = await API.testSpeech(speechText?.value, speechVoice?.value, Number(speechSpeed?.value));
-      if (speechTestStatus) speechTestStatus.textContent = result?.audio_generated ? `Reproducido: ${result.voice} · ${Number(result.speed).toFixed(2)}x` : 'No se pudo generar el audio.';
+      testSpeechBtn.textContent = 'Luna está redactando...';
+      if (speechTestStatus) speechTestStatus.textContent = 'Generando el guion y preparando la voz...';
+      if (speechGeneratedResult) speechGeneratedResult.hidden = true;
+      const result = await API.generateSpeechFromEvent(eventDescription, speechVoice?.value, Number(speechSpeed?.value));
+      if (result?.audio_generated) {
+        if (speechGeneratedText) speechGeneratedText.textContent = result.generated_script;
+        if (speechGeneratedResult) speechGeneratedResult.hidden = false;
+        if (speechTestStatus) speechTestStatus.textContent = `Reproducido: ${result.voice} · ${Number(result.speed).toFixed(2)}x`;
+      } else if (speechTestStatus) {
+        speechTestStatus.textContent = result?.error || 'No se pudo generar el guion o el audio.';
+      }
       testSpeechBtn.disabled = false;
-      testSpeechBtn.textContent = 'Reproducir prueba';
+      testSpeechBtn.textContent = 'Generar guion y reproducir';
     });
   }
 

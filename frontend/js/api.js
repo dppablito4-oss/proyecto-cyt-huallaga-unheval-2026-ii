@@ -107,6 +107,24 @@ const API = {
     }
   },
 
+  async generateSpeechFromEvent(eventDescription, voice, speed) {
+    try {
+      const res = await fetch('/api/debug/generate-event-speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_description: eventDescription, voice, speed })
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => null);
+        throw new Error(error?.detail || `HTTP error! status: ${res.status}`);
+      }
+      return await res.json();
+    } catch (e) {
+      console.error('Error al generar voz desde el evento:', e);
+      return { error: e.message };
+    }
+  },
+
   /**
    * Prueba el análisis de visión multimodal con fotogramas del buffer o sintéticos.
    * Endpoint: POST /api/debug/test-analysis
