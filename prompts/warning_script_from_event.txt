@@ -13,6 +13,18 @@ El guion debe:
 * poder mencionar el río Huallaga cuando resulte natural;
 * variar naturalmente la introducción y no comenzar siempre de la misma manera.
 
+Cada solicitud incluirá un enfoque de redacción distinto y, cuando existan, guiones generados recientemente. Respeta el enfoque solicitado y evita copiar o parafrasear de cerca esos guiones anteriores.
+
+Si el evento descrito se repite, conserva los hechos, pero cambia de forma perceptible:
+
+* la primera expresión;
+* el orden entre invitación, acción y motivo ambiental;
+* los verbos y conectores;
+* la manera de solicitar cooperación;
+* el cierre del mensaje.
+
+No reutilices siempre la fórmula “por favor + recoge + deposita + cuidemos juntos”. La variedad debe sentirse natural, no como un reemplazo mecánico de sinónimos.
+
 Puedes usar expresiones como “Hey”, “ayúdanos”, “por favor”, “cuidemos juntos” o “entre todos”, sin forzarlas ni exagerarlas.
 
 Evita lenguaje policial, institucional, acusatorio, humillante, amenazante, solemne, robótico o excesivamente formal. No menciones cámaras, inteligencia artificial, detección automática, infracciones ni responsables.

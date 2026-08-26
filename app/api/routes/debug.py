@@ -15,7 +15,10 @@ Endpoints:
 """
 
 import logging
+from collections import deque
 from datetime import datetime
+from itertools import cycle
+from threading import Lock
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
@@ -30,6 +33,25 @@ from app.config import settings
 
 router = APIRouter(prefix="/debug")
 logger = logging.getLogger(__name__)
+
+SCRIPT_VARIATION_STYLES = cycle((
+    "Comienza con una invitación colectiva y termina con una acción concreta. No abras con 'Por favor'.",
+    "Empieza directamente con la acción, añade después un motivo positivo y cierra agradeciendo la colaboración.",
+    "Abre con el objetivo de mantener limpia la ribera y formula la petición en la segunda frase.",
+    "Usa una entrada amistosa y espontánea. Puedes usar 'Hey', pero evita 'cuidemos juntos'.",
+    "Formula la petición como una invitación a colaborar y reserva la referencia al Huallaga para el cierre.",
+    "Comienza con una pregunta breve como '¿Nos ayudas...?' y continúa con una indicación clara.",
+    "Destaca primero el valor de la orilla o del río y usa una forma verbal distinta de 'deposítala correctamente'.",
+    "Usa un mensaje especialmente breve: acción clara, tono cálido y un cierre optimista sin comenzar con 'Hey'.",
+))
+RECENT_TEST_SCRIPTS = deque(maxlen=8)
+SCRIPT_VARIATION_LOCK = Lock()
+
+
+def _next_script_context() -> tuple[str, list[str]]:
+    """Entrega una pauta rotativa y una copia segura de los guiones recientes."""
+    with SCRIPT_VARIATION_LOCK:
+        return next(SCRIPT_VARIATION_STYLES), list(RECENT_TEST_SCRIPTS)
 
 
 class SpeechTestRequest(BaseModel):
@@ -107,6 +129,8 @@ def generate_event_speech(payload: EventSpeechTestRequest):
         raise HTTPException(status_code=503, detail="OPENAI_API_KEY no está configurada.")
 
     prompt_path = settings.PROMPTS_DIR / "warning_script_from_event.txt"
+    variation_style, recent_scripts = _next_script_context()
+    recent_block = "\n".join(f"- {item}" for item in recent_scripts) or "- Ninguno todavía."
     try:
         from openai import OpenAI
 
@@ -119,7 +143,12 @@ def generate_event_speech(payload: EventSpeechTestRequest):
                 {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
-                    "content": f"Evento descrito para la prueba: {payload.event_description}",
+                    "content": (
+                        f"Evento descrito para la prueba: {payload.event_description}\n\n"
+                        f"Enfoque obligatorio para esta versión: {variation_style}\n\n"
+                        "Guiones recientes que no debes repetir ni parafrasear de cerca:\n"
+                        f"{recent_block}"
+                    ),
                 },
             ],
             response_format=GeneratedWarningScript,
@@ -128,13 +157,15 @@ def generate_event_speech(payload: EventSpeechTestRequest):
         if parsed is None or not parsed.script.strip():
             raise ValueError("Luna no devolvió un guion válido.")
         script = parsed.script.strip()
+        with SCRIPT_VARIATION_LOCK:
+            RECENT_TEST_SCRIPTS.append(script)
     except Exception as exc:
         logger.error("Error al generar el guion de prueba con Luna: %s", exc)
         raise HTTPException(status_code=502, detail="Luna no pudo generar el guion de prueba.") from exc
 
     from app.state import system_state
 
-    system_state.add_log("AI", f"[GUION IA] Luna generó: \"{script}\"")
+    system_state.add_log("AI", f"[GUION IA] Luna generó una variante nueva: \"{script}\"")
     service = OpenAISpeechService(voice=payload.voice, speed=payload.speed)
     output_path = f"data/audio/test_event_{datetime.now():%Y%m%d_%H%M%S}.wav"
     result = service.generate_and_play_streaming(script, output_path, LocalSpeakerOutput())
@@ -145,6 +176,7 @@ def generate_event_speech(payload: EventSpeechTestRequest):
     return {
         "event_description": payload.event_description,
         "generated_script": script,
+        "variation_style": variation_style,
         "model": settings.OPENAI_VISION_MODEL,
         "voice": service.voice,
         "speed": service.speed,
