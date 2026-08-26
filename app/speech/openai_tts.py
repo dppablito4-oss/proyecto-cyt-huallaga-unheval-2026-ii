@@ -30,13 +30,14 @@ if TYPE_CHECKING:
 
 
 ENVIRONMENTAL_WARNING_INSTRUCTIONS = """
-Habla como un sistema público de advertencia ambiental.
-Tono firme, serio y autoritativo, pero nunca agresivo.
-Debe sonar como una advertencia inmediata, no como una narración ni una lectura.
-Pronuncia \"Atención\" con énfasis y realiza una pausa breve inmediatamente después.
-Usa un ritmo ligeramente rápido y una dicción muy clara.
-La instrucción principal debe sonar directa y urgente.
-Evita sonar alegre, conversacional, relajado o excesivamente amable.
+Habla como la voz natural de un sistema público de cuidado ambiental.
+Usa un tono animoso, atento y seguro, con equilibrio entre formalidad y cercanía.
+Debe sonar humano y espontáneo: serio al comunicar el problema, pero tranquilo y relajado al dar la solución.
+Mantén autoridad sin sonar rígido, militar, regañón ni agresivo.
+Pronuncia \"Atención\" con claridad y haz una pausa breve después, sin dramatizarla demasiado.
+Usa un ritmo ágil, dicción clara y una entonación cálida que motive a corregir la conducta.
+La instrucción debe sentirse directa, respetuosa y fácil de seguir.
+Evita sonar robótico, solemne, excesivamente alegre o como si estuvieras leyendo un documento.
 """.strip()
 
 

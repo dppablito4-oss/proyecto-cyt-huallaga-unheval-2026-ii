@@ -181,5 +181,18 @@ const API = {
       console.error('Error al enviar imágenes manuales:', e);
       return null;
     }
+  },
+
+  async exportEvidencePdf() {
+    try {
+      const res = await fetch('/api/reports/evidence.pdf');
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      return { blob: await res.blob(), filename: match?.[1] || 'SIVARH_reporte_evidencia.pdf' };
+    } catch (e) {
+      console.error('Error al exportar el reporte PDF:', e);
+      return null;
+    }
   }
 };

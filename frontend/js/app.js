@@ -151,7 +151,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 7. Carga inicial del estado por REST
+  const exportPdfBtn = document.getElementById('btn-export-pdf');
+  if (exportPdfBtn) {
+    exportPdfBtn.addEventListener('click', async () => {
+      exportPdfBtn.disabled = true;
+      exportPdfBtn.textContent = 'Generando PDF...';
+      const result = await API.exportEvidencePdf();
+      if (result) {
+        const url = URL.createObjectURL(result.blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = result.filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      } else {
+        alert('No se pudo generar el reporte PDF.');
+      }
+      exportPdfBtn.disabled = false;
+      exportPdfBtn.textContent = 'Exportar PDF';
+    });
+  }
+
+  // 8. Carga inicial del estado por REST
   API.getStatus().then(data => {
     if (data) {
       Dashboard.updateStatus(data);
