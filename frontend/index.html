@@ -29,7 +29,6 @@
         <button class="btn btn-primary" id="btn-start-manual-recognition">Iniciar reconocimiento</button>
         <button class="btn btn-secondary" id="btn-send-manual-images" disabled>Enviar imágenes a IA</button>
         <button class="btn btn-danger" id="btn-stop-pipeline">Detener</button>
-        <button class="btn btn-secondary" id="btn-test-speech">Probar voz</button>
       </div>
     </header>
 
@@ -64,6 +63,46 @@
           <div class="result-row warning-row">
             <span class="muted-label">Ultima advertencia</span>
             <p id="warning-text">Sin advertencias emitidas.</p>
+          </div>
+        </section>
+
+        <section class="panel speech-panel">
+          <div class="panel-heading">
+            <div><h2>Prueba de voz ambiental</h2><p class="panel-note">Selecciona un mensaje, voz y velocidad para probar el altavoz.</p></div>
+          </div>
+          <div class="speech-form">
+            <label for="speech-preset">Mensaje preestablecido</label>
+            <select id="speech-preset">
+              <option value="attention">Advertencia general</option>
+              <option value="waste">Abandono de residuos</option>
+              <option value="bottle">Botella o recipiente</option>
+              <option value="urgent">Advertencia urgente</option>
+            </select>
+
+            <label for="speech-text">Texto que leerá SIVARH</label>
+            <textarea id="speech-text" rows="3" maxlength="240">Atención. Se ha detectado el abandono de residuos en el suelo. Por favor, recójalos y deposítelos en un contenedor adecuado.</textarea>
+
+            <div class="speech-options">
+              <label for="speech-voice">Voz
+                <select id="speech-voice">
+                  <option value="onyx" selected>Onyx — firme</option>
+                  <option value="alloy">Alloy — equilibrada</option>
+                  <option value="ash">Ash — clara</option>
+                  <option value="echo">Echo — grave</option>
+                  <option value="fable">Fable — expresiva</option>
+                  <option value="nova">Nova — enérgica</option>
+                  <option value="sage">Sage — serena</option>
+                  <option value="shimmer">Shimmer — suave</option>
+                </select>
+              </label>
+              <label for="speech-speed">Velocidad <output id="speech-speed-value" for="speech-speed">1.10x</output>
+                <input id="speech-speed" type="range" min="0.75" max="1.35" step="0.05" value="1.10">
+              </label>
+            </div>
+            <div class="speech-actions">
+              <button class="btn btn-primary" id="btn-test-speech">Reproducir prueba</button>
+              <span id="speech-test-status" class="form-status" aria-live="polite">Listo para probar.</span>
+            </div>
           </div>
         </section>
       </section>

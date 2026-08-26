@@ -45,17 +45,24 @@ class OpenAISpeechService(SpeechService):
     Servicio de síntesis de voz basado en la API de OpenAI Audio TTS.
     """
 
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, voice: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        voice: Optional[str] = None,
+        speed: Optional[float] = None,
+    ):
         """
         Args:
             api_key (str, opcional): Clave de API de OpenAI.
             model (str, opcional): Modelo TTS (ej. 'gpt-4o-mini-tts', 'tts-1', 'tts-1-hd').
             voice (str, opcional): Voz configurada (ej. 'onyx', 'alloy', 'echo').
+            speed (float, opcional): Velocidad específica para esta síntesis.
         """
         self.api_key = api_key or settings.OPENAI_API_KEY
         self.model = model or settings.OPENAI_TTS_MODEL
         self.voice = voice or settings.OPENAI_TTS_VOICE
-        self.speed = settings.OPENAI_TTS_SPEED
+        self.speed = speed if speed is not None else settings.OPENAI_TTS_SPEED
 
     def generate_speech(self, text: str, output_path: str) -> Optional[str]:
         """

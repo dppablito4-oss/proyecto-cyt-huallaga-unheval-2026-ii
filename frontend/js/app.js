@@ -96,18 +96,39 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 5. Botón: Probar voz TTS rápida (Onyx)
+  // 5. Panel de prueba de voz TTS: mensaje, voz y velocidad
   const testSpeechBtn = document.getElementById('btn-test-speech');
+  const speechPreset = document.getElementById('speech-preset');
+  const speechText = document.getElementById('speech-text');
+  const speechVoice = document.getElementById('speech-voice');
+  const speechSpeed = document.getElementById('speech-speed');
+  const speechSpeedValue = document.getElementById('speech-speed-value');
+  const speechTestStatus = document.getElementById('speech-test-status');
+  const speechMessages = {
+    attention: 'Atención. Se ha detectado una conducta que puede afectar el entorno. Por favor, mantenga limpia la ribera del río Huallaga.',
+    waste: 'Atención. Se ha detectado el abandono de residuos en el suelo. Por favor, recójalos y deposítelos en un contenedor adecuado.',
+    bottle: 'Atención. Se ha detectado el abandono de una botella o recipiente. Por favor, recójalo y deposítelo en un contenedor autorizado.',
+    urgent: 'Atención. Arrojar residuos está prohibido. Detenga esta acción, recoja el residuo y deposítelo correctamente.'
+  };
+  if (speechPreset && speechText) {
+    speechPreset.addEventListener('change', () => {
+      speechText.value = speechMessages[speechPreset.value] || speechMessages.attention;
+    });
+  }
+  if (speechSpeed && speechSpeedValue) {
+    const updateSpeedLabel = () => { speechSpeedValue.value = `${Number(speechSpeed.value).toFixed(2)}x`; };
+    speechSpeed.addEventListener('input', updateSpeedLabel);
+    updateSpeedLabel();
+  }
   if (testSpeechBtn) {
     testSpeechBtn.addEventListener('click', async () => {
       testSpeechBtn.disabled = true;
       testSpeechBtn.textContent = 'Sintetizando...';
-      const result = await API.testSpeech('Prueba de advertencia ambiental de SIVARH en el sector Puente Huallaga.');
-      if (result) {
-        console.log('TTS resultado:', result);
-      }
+      if (speechTestStatus) speechTestStatus.textContent = 'Generando y reproduciendo...';
+      const result = await API.testSpeech(speechText?.value, speechVoice?.value, Number(speechSpeed?.value));
+      if (speechTestStatus) speechTestStatus.textContent = result?.audio_generated ? `Reproducido: ${result.voice} · ${Number(result.speed).toFixed(2)}x` : 'No se pudo generar el audio.';
       testSpeechBtn.disabled = false;
-      testSpeechBtn.textContent = 'Probar Voz';
+      testSpeechBtn.textContent = 'Reproducir prueba';
     });
   }
 

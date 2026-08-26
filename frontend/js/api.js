@@ -88,12 +88,16 @@ const API = {
    * Endpoint: POST /api/debug/test-speech
    * @param {string} text - Texto a sintetizar
    */
-  async testSpeech(text = 'Prueba de advertencia ambiental de SIVARH en el sector Puente Huallaga.') {
+  async testSpeech(
+    text = 'Prueba de advertencia ambiental de SIVARH en el sector Puente Huallaga.',
+    voice = null,
+    speed = null
+  ) {
     try {
       const res = await fetch('/api/debug/test-speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ text, voice, speed })
       });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       return await res.json();

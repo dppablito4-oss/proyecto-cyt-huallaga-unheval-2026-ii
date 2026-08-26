@@ -38,6 +38,12 @@ class SpeechTestRequest(BaseModel):
         default=None,
         description="Voz TTS a probar. Si se omite, usa OPENAI_TTS_VOICE."
     )
+    speed: Optional[float] = Field(
+        default=None,
+        ge=0.25,
+        le=4.0,
+        description="Velocidad de reproducción/síntesis, entre 0.25 y 4.0."
+    )
 
 
 class AnalysisTestRequest(BaseModel):
@@ -60,7 +66,7 @@ def test_speech(payload: SpeechTestRequest):
     Sintetiza el texto recibido a un archivo de audio con OpenAI TTS
     y solicita su reproducción inmediata a través del altavoz configurado.
     """
-    service = OpenAISpeechService(voice=payload.voice)
+    service = OpenAISpeechService(voice=payload.voice, speed=payload.speed)
     output_path = "data/audio/test_speech.wav"
 
     speaker = LocalSpeakerOutput()
