@@ -44,6 +44,8 @@ class SystemStatusModel(BaseModel):
     camera_source: str = Field("0", description="Identificador o URL de la fuente de cámara.")
     fps: float = Field(0.0, description="Cuadros por segundo de procesamiento en tiempo real.")
     persons_detected: int = Field(0, description="Cantidad de personas detectadas actualmente por YOLO.")
+    active_tracks: int = Field(0, description="Cantidad de tracks confirmados visibles en el frame actual.")
+    active_track_ids: List[int] = Field(default_factory=list, description="Identificadores temporales anónimos visibles.")
     active_event: bool = Field(False, description="Indica si existe una ventana de captura de evento activa.")
     cooldown_remaining: float = Field(0.0, description="Segundos restantes de enfriamiento activo.")
     last_event_time: Optional[str] = Field(None, description="Marca de tiempo ISO del último evento detectado.")
@@ -77,6 +79,8 @@ class SystemState:
         self._camera_source = settings.CAMERA_SOURCE
         self._fps = 0.0
         self._persons_detected = 0
+        self._active_tracks = 0
+        self._active_track_ids: List[int] = []
         self._active_event = False
         self._cooldown_remaining = 0.0
         self._last_event_time: Optional[datetime] = None
@@ -130,6 +134,8 @@ class SystemState:
                 "camera_source": self._camera_source,
                 "fps": self._fps,
                 "persons_detected": self._persons_detected,
+                "active_tracks": self._active_tracks,
+                "active_track_ids": list(self._active_track_ids),
                 "active_event": self._active_event,
                 "cooldown_remaining": self._cooldown_remaining,
                 "last_event_time": self._last_event_time.isoformat() if self._last_event_time else None,
@@ -161,6 +167,12 @@ class SystemState:
         """Actualiza la cantidad de personas observadas en el último frame."""
         with self._lock:
             self._persons_detected = count
+
+    def set_tracking_status(self, active_tracks: int, track_ids: List[int]) -> None:
+        """Publica un resumen compatible del tracking sin exponer datos biométricos."""
+        with self._lock:
+            self._active_tracks = active_tracks
+            self._active_track_ids = list(track_ids)
 
     def set_cooldown_remaining(self, seconds: float) -> None:
         """Actualiza el tiempo restante de enfriamiento."""

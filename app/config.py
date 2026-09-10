@@ -16,7 +16,7 @@ Flujo de invocación:
 
 import os
 from pathlib import Path
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 # Ruta absoluta al archivo .env ubicado en la raíz del proyecto
@@ -80,6 +80,24 @@ class Settings(BaseModel):
     # Utilizado por `app.vision.detector.LocalDetector` como filtro de bajo costo
     YOLO_MODEL: str = os.getenv("YOLO_MODEL", "yolov8n.pt")
     YOLO_PERSON_CONFIDENCE: float = float(os.getenv("YOLO_PERSON_CONFIDENCE", "0.50"))
+
+    # ==========================================
+    # 4.1. Tracking temporal anónimo (SIVARH v2)
+    # ==========================================
+    TRACKING_ENABLED: bool = os.getenv("TRACKING_ENABLED", "True").lower() in ("true", "1", "yes")
+    TRACKER_TYPE: str = os.getenv("TRACKER_TYPE", "bytetrack")
+    TRACK_HISTORY_SECONDS: float = Field(default=float(os.getenv("TRACK_HISTORY_SECONDS", "15")), gt=0)
+    TRACK_TTL_SECONDS: float = Field(default=float(os.getenv("TRACK_TTL_SECONDS", "5")), gt=0)
+    TRACK_ACTIVATION_THRESHOLD: float = Field(
+        default=float(os.getenv("TRACK_ACTIVATION_THRESHOLD", "0.50")), ge=0.0, le=1.0
+    )
+    TRACK_LOST_BUFFER: int = Field(default=int(os.getenv("TRACK_LOST_BUFFER", "30")), ge=0)
+    TRACK_MIN_CONSECUTIVE_FRAMES: int = Field(
+        default=int(os.getenv("TRACK_MIN_CONSECUTIVE_FRAMES", "2")), ge=1
+    )
+    TRACK_MIN_IOU_THRESHOLD: float = Field(
+        default=float(os.getenv("TRACK_MIN_IOU_THRESHOLD", "0.10")), ge=0.0, le=1.0
+    )
 
     # ==========================================
     # 5. Buffer Circular y Gestión de Eventos

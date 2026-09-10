@@ -1,4 +1,4 @@
-# Documentación Técnica y Arquitectura del Sistema — SIVARH (v0.1)
+# Documentación Técnica y Arquitectura del Sistema — SIVARH (v2, Fase 1)
 
 **Proyecto:** SIVARH: Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga orientado a la detección preventiva del arrojo directo de residuos sólidos, sector Puente Huallaga – UNHEVAL.  
 **Investigación sobre la Problemática del Arrojo de Residuos Sólidos en las Riberas del Río Huallaga y Estrategias Preventivas Basadas en Inteligencia Artificial**  
@@ -8,9 +8,9 @@
 
 ## Estado de implementación
 
-La versión actual es un prototipo experimental local. La captura de cámara, YOLO, buffer temporal, análisis multimodal, decisión, TTS, SQLite y dashboard están integrados. La cámara permanece activa en un hilo mientras un segundo hilo procesa como máximo un evento, evitando congelar el video durante la espera de contexto o las llamadas externas.
+La versión actual es un prototipo experimental local. La captura de cámara, YOLO, ByteTrack, historial temporal, buffer, análisis multimodal, decisión, TTS, SQLite y dashboard están integrados. La cámara permanece activa en un hilo mientras un segundo hilo procesa como máximo un evento, evitando congelar el video durante la espera de contexto o las llamadas externas.
 
-El buffer conserva por defecto 5 muestras por segundo durante 5 segundos, en lugar de almacenar los 30 FPS completos. Las clases de métricas, tracking y otras extensiones están preparadas, pero su integración y validación científica pertenecen a fases posteriores.
+El buffer conserva por defecto 5 muestras por segundo durante 5 segundos, en lugar de almacenar los 30 FPS completos. ByteTrack asigna IDs temporales anónimos y `TrackHistory` conserva por defecto 15 segundos de trayectoria, con liberación de memoria por TTL. Las métricas completas, zonas, asociaciones y validación científica pertenecen a fases posteriores.
 
 ---
 
@@ -137,6 +137,8 @@ flowchart TD
 
 ### 4.2. Visión por Computadora Local (`app/vision/`)
 - **`LocalDetector` (`detector.py`)**: Carga el modelo `yolov8n.pt` para la detección de personas (clase `person` / ID 0 en COCO). Funciona como **filtro barato**: si el encuadre está vacío, se descarta el procesamiento pesado.
+- **`ByteTrackAdapter` (`tracker.py`)**: Convierte las detecciones actuales al contrato de `supervision`, conserva IDs anónimos entre fotogramas y aísla el worker del algoritmo concreto mediante `MultiObjectTracker`.
+- **`TrackHistory` (`track_history.py`)**: Mantiene una ventana temporal configurable y deriva trayectoria, velocidad, dirección, distancia y zonas, sin conservar puntos indefinidamente.
 - **`FrameBuffer` (`frame_buffer.py`)**: Estructura circular y thread-safe en memoria RAM (`deque(maxlen=N)`) que conserva por defecto 5 muestras por segundo durante los últimos 5 segundos. La cámara sigue operando a su velocidad normal y el buffer recibe contexto anterior y posterior al disparo del evento.
 - **`FrameSelector` (`frame_selector.py`)**: Reduce la ventana temporal, de hasta 25 fotogramas con la configuración predeterminada, a una secuencia de 5 imágenes clave mediante muestreo uniforme.
 - **`ImageProcessor` (`image_processor.py`)**: Escala la imagen (máximo 1280 px), aplica compresión JPEG (calidad 70) y la codifica a Base64 Data URL (`data:image/jpeg;base64,...`).

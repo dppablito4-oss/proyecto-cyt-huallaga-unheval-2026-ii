@@ -34,6 +34,7 @@ from app.vision.detector import LocalDetector
 from app.vision.frame_buffer import FrameBuffer
 from app.vision.frame_selector import FrameSelector
 from app.vision.image_processor import ImageProcessor
+from app.vision.tracker import create_tracker
 from app.events.manager import EventManager
 from app.events.rules import DecisionEngine
 from app.ai.vision_client import VisionAI
@@ -95,6 +96,17 @@ class VideoPipelineWorker:
             max_width=settings.IMAGE_MAX_WIDTH,
             jpeg_quality=settings.JPEG_QUALITY
         )
+        self._tracker = create_tracker(
+            tracker_type=settings.TRACKER_TYPE,
+            enabled=settings.TRACKING_ENABLED,
+            history_seconds=settings.TRACK_HISTORY_SECONDS,
+            track_ttl_seconds=settings.TRACK_TTL_SECONDS,
+            frame_rate=float(settings.CAMERA_FPS),
+            track_activation_threshold=settings.TRACK_ACTIVATION_THRESHOLD,
+            lost_track_buffer=settings.TRACK_LOST_BUFFER,
+            minimum_consecutive_frames=settings.TRACK_MIN_CONSECUTIVE_FRAMES,
+            minimum_iou_threshold=settings.TRACK_MIN_IOU_THRESHOLD,
+        )
         self._event_manager = EventManager(
             cooldown_seconds=settings.EVENT_COOLDOWN_SECONDS
         )
@@ -129,6 +141,8 @@ class VideoPipelineWorker:
             return False
 
         self._stop_event.clear()
+        self._tracker.reset()
+        system_state.set_tracking_status(active_tracks=0, track_ids=[])
         self._thread = threading.Thread(target=self._run_loop, name="VideoPipelineWorker", daemon=True)
         self._thread.start()
         logger.info("VideoPipelineWorker iniciado.")
@@ -149,6 +163,8 @@ class VideoPipelineWorker:
             self._camera.close()
             self._camera = None
         system_state.set_camera_status(connected=False, source=settings.CAMERA_SOURCE, fps=0.0)
+        self._tracker.reset()
+        system_state.set_tracking_status(active_tracks=0, track_ids=[])
         logger.info("VideoPipelineWorker detenido.")
 
     def start_manual_recognition(self) -> tuple[bool, str]:
@@ -294,6 +310,29 @@ class VideoPipelineWorker:
             system_state.add_log("INFO", f"Configuración operativa actualizada: {summary}.")
         return applied
 
+    def _update_tracking(self, detection, frame, timestamp: datetime):
+        """Actualiza ByteTrack y publica solo un resumen anónimo para la API."""
+        try:
+            tracked_objects = self._tracker.update(
+                detection.detections,
+                timestamp=timestamp,
+                frame=frame,
+            )
+            track_ids = [tracked.track_id for tracked in tracked_objects]
+            system_state.set_tracking_status(
+                active_tracks=len(tracked_objects),
+                track_ids=track_ids,
+            )
+            for track_id in self._tracker.last_created_track_ids:
+                system_state.add_log("TRACK", f"[TRACK] Person #{track_id} created.")
+            for track_id in self._tracker.last_expired_track_ids:
+                system_state.add_log("TRACK", f"[TRACK] Person #{track_id} expired.")
+            return tracked_objects
+        except Exception as exc:
+            logger.error("Error actualizando ByteTrack: %s", exc)
+            system_state.set_tracking_status(active_tracks=0, track_ids=[])
+            return []
+
     def _run_loop(self) -> None:
         """
         Bucle principal de captura y procesamiento. Ejecuta en hilo de fondo.
@@ -324,12 +363,14 @@ class VideoPipelineWorker:
                 time.sleep(0.1)
                 continue
 
+            frame_timestamp = datetime.now()
+
             # Guardar frame actual para streaming MJPEG
             with self._frame_lock:
                 self._current_frame = frame
 
             # Almacenar en buffer circular
-            self._frame_buffer.add_frame(frame)
+            self._frame_buffer.add_frame(frame, timestamp=frame_timestamp)
 
             # Medir FPS reales
             frame_count += 1
@@ -345,6 +386,10 @@ class VideoPipelineWorker:
             # Detección local de personas con YOLO
             detection = self._detector.detect_persons(frame)
             system_state.set_persons_detected(detection.persons)
+
+            # Fase 1 de SIVARH v2: tracking persistente de las detecciones actuales.
+            # La generación de eventos continúa sin cambios hasta la Fase 7.
+            self._update_tracking(detection, frame, frame_timestamp)
 
             # Durante pruebas manuales no se usa cooldown ni se dispara análisis por detección.
             if settings.MANUAL_RECOGNITION_MODE:

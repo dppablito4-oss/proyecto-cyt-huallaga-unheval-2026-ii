@@ -10,11 +10,11 @@
 
 ## Estado actual del prototipo
 
-La versión actual implementa un flujo experimental de extremo a extremo: captura de video, detección local de personas, análisis multimodal, decisión, síntesis de voz, persistencia local y dashboard.
+La versión actual implementa un flujo experimental de extremo a extremo: captura de video, detección local de personas, tracking anónimo con ByteTrack, análisis multimodal, decisión, síntesis de voz, persistencia local y dashboard.
 
 La captura permanece activa mientras el evento acumula contexto y mientras la IA o el TTS procesan el resultado. El análisis se ejecuta en un hilo independiente y se admite un solo evento activo a la vez. Para reducir el consumo de RAM, la cámara puede operar a su FPS normal, pero el buffer conserva por defecto solo **5 muestras por segundo durante 5 segundos** (máximo 25 frames antes de la selección final).
 
-Esta versión demuestra la viabilidad técnica del flujo. La validación científica con videos etiquetados, métricas completas, tracking, pose, segmentación y despliegue en campo corresponde a etapas posteriores.
+La Fase 1 de SIVARH v2 incorpora IDs temporales persistentes, estado de track, trayectoria acotada y limpieza por TTL. Por compatibilidad, el disparo de eventos todavía usa la detección de presencia; cambiará a evidencia espacio-temporal en las fases posteriores. La validación científica con videos etiquetados, métricas completas, pose, segmentación y despliegue en campo sigue pendiente.
 
 ---
 
@@ -121,7 +121,8 @@ huallaga-ai-monitor/
 │   │
 │   ├── vision/                       # Pipeline de Visión por Computadora
 │   │   ├── detector.py               # YOLOv8 local (filtro económico de personas)
-│   │   ├── tracker.py                # Interfaz de seguimiento de objetos
+│   │   ├── tracker.py                # Adaptador ByteTrack y contrato intercambiable
+│   │   ├── track_history.py          # Trayectoria, velocidad, dirección y TTL
 │   │   ├── frame_buffer.py           # Buffer circular muestreado en RAM (5s a 5 FPS por defecto)
 │   │   ├── frame_selector.py         # Muestreo temporal uniforme de frames
 │   │   └── image_processor.py        # Compresión JPEG, resize y Base64
@@ -240,6 +241,10 @@ OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=onyx
 CAMERA_SOURCE=0
 YOLO_MODEL=yolov8n.pt
+TRACKING_ENABLED=True
+TRACKER_TYPE=bytetrack
+TRACK_HISTORY_SECONDS=15
+TRACK_TTL_SECONDS=5
 BUFFER_SECONDS=5
 BUFFER_FPS=5
 ```
@@ -309,7 +314,7 @@ El diseño adopta principios de minimización de datos y evita deliberadamente l
 
 Estas mejoras forman parte de la hoja de ruta y **no se consideran implementadas en la versión actual**:
 
-- tracking de personas con ByteTrack o BoT-SORT;
+- tracking multiclase y evaluación futura de BoT-SORT para oclusiones complejas;
 - pose estimation y segmentación para generar mejores eventos candidatos;
 - métricas completas de latencia, payload, precisión, recall y falsos positivos;
 - conjunto de videos positivos y negativos etiquetados;

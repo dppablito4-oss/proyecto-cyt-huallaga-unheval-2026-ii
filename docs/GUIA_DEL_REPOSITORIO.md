@@ -4,7 +4,7 @@
 
 ## ¿Qué es este proyecto?
 
-SIVARH es un prototipo de vigilancia ambiental para las riberas del río Huallaga, en el sector Puente Huallaga – UNHEVAL. Usa una cámara para observar la ribera, detecta personas localmente con YOLO y envía una secuencia de imágenes a OpenAI Vision para decidir si ocurrió abandono o arrojo de residuos.
+SIVARH es un prototipo de vigilancia ambiental para las riberas del río Huallaga, en el sector Puente Huallaga – UNHEVAL. Usa una cámara para observar la ribera, detecta personas localmente con YOLO, mantiene tracks anónimos con ByteTrack y envía una secuencia de imágenes a OpenAI Vision para decidir si ocurrió abandono o arrojo de residuos.
 
 Cuando el resultado se clasifica como `WARN`, el sistema genera una advertencia de voz. Los eventos, las imágenes de vista previa y los audios se guardan localmente para auditoría.
 
@@ -37,6 +37,8 @@ VideoPipelineWorker
         ↓
 YOLO: muestra personas detectadas
         ↓
+ByteTrack: mantiene IDs temporales y trayectorias
+        ↓
 Captura manual de 4 imágenes
         ↓
 OpenAI Vision: GPT-5.6 Luna
@@ -55,7 +57,7 @@ SQLite + dashboard + logs
 | `app/main.py` | Inicia FastAPI, el dashboard y el worker de cámara. |
 | `app/config.py` | Lee y centraliza toda la configuración de `.env`. |
 | `app/camera/worker.py` | Orquesta captura, modo manual, IA, decisiones y audio. |
-| `app/vision/` | YOLO, buffer temporal, selección y compresión de imágenes. |
+| `app/vision/` | YOLO, ByteTrack, historial temporal, buffer, selección y compresión. |
 | `app/ai/vision_client.py` | Envía las imágenes y el prompt a OpenAI Vision. |
 | `prompts/environmental_event.txt` | Instrucciones que sigue el modelo de visión. |
 | `app/events/` | Reglas de decisión y cooldown del modo automático. |

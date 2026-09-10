@@ -1,1 +1,1 @@
-# Package models for Pydantic schemas
+"""Modelos Pydantic compartidos por las capas de SIVARH."""
