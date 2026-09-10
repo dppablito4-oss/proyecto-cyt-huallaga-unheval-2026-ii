@@ -101,7 +101,14 @@ class OpenAISpeechService(SpeechService):
             client = OpenAI(api_key=self.api_key)
 
             # Asegurar la creación de la carpeta de destino (data/audio/)
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            output = Path(output_path)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            supported_formats = {"mp3", "opus", "aac", "flac", "wav", "pcm"}
+            response_format = output.suffix.lower().lstrip(".")
+            if response_format not in supported_formats:
+                response_format = "mp3"
+                output = output.with_suffix(".mp3")
+            output_path = str(output)
 
             try:
                 # Intentar con el modelo configurado (ej. gpt-4o-mini-tts / tts-1)
@@ -111,6 +118,7 @@ class OpenAISpeechService(SpeechService):
                     input=text,
                     instructions=ENVIRONMENTAL_WARNING_INSTRUCTIONS,
                     speed=self.speed,
+                    response_format=response_format,
                 )
             except Exception as model_err:
                 # Si el modelo específico falla, fallback a 'tts-1' estándar
@@ -121,6 +129,7 @@ class OpenAISpeechService(SpeechService):
                         voice=self.voice,
                         input=text,
                         speed=self.speed,
+                        response_format=response_format,
                     )
                 else:
                     raise model_err
@@ -143,8 +152,15 @@ class OpenAISpeechService(SpeechService):
             logger.warning("OPENAI_API_KEY no configurada. Omitiendo generación TTS en streaming.")
             return None
         if settings.OPENAI_TTS_RESPONSE_FORMAT != "pcm":
-            logger.warning("OPENAI_TTS_RESPONSE_FORMAT debe ser 'pcm' para reproducción en streaming.")
-            return self.generate_speech(text, output_path)
+            logger.warning(
+                "OPENAI_TTS_RESPONSE_FORMAT no es 'pcm'; generando el archivo completo "
+                "antes de reproducirlo."
+            )
+            generated_path = self.generate_speech(text, output_path)
+            if generated_path is None or not audio_output.play(generated_path):
+                logger.error("El audio TTS fue generado, pero no pudo reproducirse localmente.")
+                return None
+            return generated_path
 
         try:
             from openai import OpenAI

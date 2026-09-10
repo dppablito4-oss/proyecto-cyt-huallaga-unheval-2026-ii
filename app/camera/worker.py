@@ -112,7 +112,9 @@ class VideoPipelineWorker:
         self._analysis_thread: Optional[threading.Thread] = None
         self._manual_capture_thread: Optional[threading.Thread] = None
         self._manual_frames = []
+        self._manual_jpeg_quality = settings.JPEG_QUALITY
         self._manual_lock = threading.Lock()
+        self._runtime_config_lock = threading.Lock()
 
     @property
     def current_frame(self):
@@ -186,6 +188,8 @@ class VideoPipelineWorker:
             status="created",
             local_detection=LocalDetectionSummary(),
         )
+        with self._manual_lock:
+            event.capture.jpeg_quality = self._manual_jpeg_quality
         system_state.set_active_event(True)
         system_state.set_manual_sequence_status(captured=len(jpeg_frames), ready=False)
         self._analysis_thread = threading.Thread(
@@ -205,6 +209,11 @@ class VideoPipelineWorker:
         interval = settings.MANUAL_CAPTURE_INTERVAL_SECONDS
         preview_dir = settings.DATA_DIR / "frames"
         preview_dir.mkdir(parents=True, exist_ok=True)
+        with self._runtime_config_lock:
+            sequence_processor = ImageProcessor(
+                max_width=self._image_processor.max_width,
+                jpeg_quality=self._image_processor.jpeg_quality,
+            )
         system_state.add_log("SEQUENCE", f"[MANUAL] Capturando {total} fotogramas, uno cada {interval:g}s.")
 
         for index in range(total):
@@ -217,7 +226,7 @@ class VideoPipelineWorker:
                 system_state.set_manual_sequence_status(captured=len(captured), ready=False)
                 return
 
-            jpeg_bytes = self._image_processor.compress_jpeg(frame)
+            jpeg_bytes = sequence_processor.compress_jpeg(frame)
             captured.append(jpeg_bytes)
             preview_name = f"manual-preview-{uuid.uuid4().hex}-{index + 1}.jpg"
             (preview_dir / preview_name).write_bytes(jpeg_bytes)
@@ -230,6 +239,7 @@ class VideoPipelineWorker:
 
         with self._manual_lock:
             self._manual_frames = captured
+            self._manual_jpeg_quality = sequence_processor.jpeg_quality
         system_state.set_manual_sequence_status(captured=total, ready=True)
         system_state.add_log("SEQUENCE", "[MANUAL] Secuencia lista. Presiona 'Enviar imágenes a IA'.")
 
@@ -253,6 +263,36 @@ class VideoPipelineWorker:
     @property
     def is_running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
+
+    def apply_runtime_config(
+        self,
+        frames_per_analysis: Optional[int] = None,
+        jpeg_quality: Optional[int] = None,
+        ai_warning_threshold: Optional[float] = None,
+    ) -> dict:
+        """Aplica configuración mutable al singleton y a los componentes ya construidos."""
+        applied = {}
+        with self._runtime_config_lock:
+            if frames_per_analysis is not None:
+                settings.FRAMES_PER_ANALYSIS = frames_per_analysis
+                self._frame_selector.target_frames = frames_per_analysis
+                system_state.set_frames_per_analysis(frames_per_analysis)
+                applied["FRAMES_PER_ANALYSIS"] = frames_per_analysis
+
+            if jpeg_quality is not None:
+                settings.JPEG_QUALITY = jpeg_quality
+                self._image_processor.jpeg_quality = jpeg_quality
+                applied["JPEG_QUALITY"] = jpeg_quality
+
+            if ai_warning_threshold is not None:
+                settings.AI_WARNING_THRESHOLD = ai_warning_threshold
+                self._decision_engine.warning_threshold = ai_warning_threshold
+                applied["AI_WARNING_THRESHOLD"] = ai_warning_threshold
+
+        if applied:
+            summary = ", ".join(f"{key}={value}" for key, value in applied.items())
+            system_state.add_log("INFO", f"Configuración operativa actualizada: {summary}.")
+        return applied
 
     def _run_loop(self) -> None:
         """
@@ -350,24 +390,29 @@ class VideoPipelineWorker:
                 jpeg_frames = list(manual_jpeg_frames or [])
                 system_state.add_log("SEQUENCE", f"[MANUAL] {len(jpeg_frames)} fotogramas preparados para consultar a la IA.")
             else:
-                interval = settings.SEQUENCE_FRAME_INTERVAL_SECONDS
-                capture_seconds = max(settings.EVENT_CAPTURE_SECONDS, settings.FRAMES_PER_ANALYSIS * interval)
+                with self._runtime_config_lock:
+                    frames_per_analysis = settings.FRAMES_PER_ANALYSIS
+                    interval = settings.SEQUENCE_FRAME_INTERVAL_SECONDS
+                    capture_seconds = max(settings.EVENT_CAPTURE_SECONDS, frames_per_analysis * interval)
                 system_state.add_log(
                     "SEQUENCE",
-                    f"[SECUENCIA] Capturando {settings.FRAMES_PER_ANALYSIS} fotogramas, uno cada {interval:g}s durante {capture_seconds:g}s."
+                    f"[SECUENCIA] Capturando {frames_per_analysis} fotogramas, uno cada {interval:g}s durante {capture_seconds:g}s."
                 )
                 time.sleep(capture_seconds)
                 selected = self._frame_buffer.get_frames_at_intervals(
                     start_time=event.started_at,
                     interval_seconds=interval,
-                    count=settings.FRAMES_PER_ANALYSIS,
+                    count=frames_per_analysis,
                 )
-                jpeg_frames = [self._image_processor.compress_jpeg(frame) for _, frame in selected]
+                with self._runtime_config_lock:
+                    jpeg_frames = [self._image_processor.compress_jpeg(frame) for _, frame in selected]
+                    jpeg_quality = self._image_processor.jpeg_quality
 
             # 4. Actualizar metadata de captura
             event.capture.total_frames = len(jpeg_frames)
             event.capture.selected_frames = len(jpeg_frames)
-            event.capture.jpeg_quality = settings.JPEG_QUALITY
+            if not is_manual:
+                event.capture.jpeg_quality = jpeg_quality
 
             # 6. Enviar a VisionAIClient midiendo tiempo exacto de respuesta
             system_state.set_ai_status("sending")

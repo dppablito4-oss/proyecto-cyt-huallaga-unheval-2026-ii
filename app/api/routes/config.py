@@ -57,15 +57,19 @@ def get_safe_config(settings: Settings = Depends(get_settings)):
 
 
 @router.patch("", summary="Actualizar parámetros operativos en tiempo de ejecución")
-def update_config(update_data: ConfigUpdateModel, settings: Settings = Depends(get_settings)):
+def update_config(update_data: ConfigUpdateModel):
     """
-    Aplica modificaciones en tiempo real sobre los parámetros permitidos.
+    Aplica modificaciones en tiempo real sobre los parámetros permitidos y
+    sincroniza los componentes ya construidos del pipeline.
     """
-    if update_data.frames_per_analysis is not None:
-        settings.FRAMES_PER_ANALYSIS = update_data.frames_per_analysis
-    if update_data.jpeg_quality is not None:
-        settings.JPEG_QUALITY = update_data.jpeg_quality
-    if update_data.ai_warning_threshold is not None:
-        settings.AI_WARNING_THRESHOLD = update_data.ai_warning_threshold
-        
-    return {"message": "Configuración actualizada correctamente."}
+    from app.main import pipeline_worker
+
+    applied = pipeline_worker.apply_runtime_config(
+        frames_per_analysis=update_data.frames_per_analysis,
+        jpeg_quality=update_data.jpeg_quality,
+        ai_warning_threshold=update_data.ai_warning_threshold,
+    )
+    return {
+        "message": "Configuración actualizada correctamente." if applied else "No se enviaron cambios.",
+        "updated": applied,
+    }

@@ -57,8 +57,18 @@ class LocalSpeakerOutput(AudioOutput):
 
     def play(self, audio_path: str) -> bool:
         path = Path(audio_path).resolve()
-        if not path.exists():
+        if not path.is_file():
             logger.error(f"Archivo de audio no encontrado para reproducción: {audio_path}")
+            return False
+
+        try:
+            logger.info(f"[PARLANTE ACTIVO] Reproduciendo advertencia sonora: {path}")
+            # Lanzar reproducción en hilo separado para no bloquear el pipeline.
+            thread = threading.Thread(target=self._play_system, args=(str(path),), daemon=True)
+            thread.start()
+            return True
+        except Exception as e:
+            logger.error(f"Error al iniciar reproducción de audio: {e}")
             return False
 
     def play_pcm_stream(self, chunks: Iterable[bytes], sample_rate: int = 24000) -> bool:
@@ -176,16 +186,6 @@ class LocalSpeakerOutput(AudioOutput):
             return False
         finally:
             winmm.waveOutClose(wave_out)
-
-        try:
-            logger.info(f"[PARLANTE ACTIVO] Reproduciendo advertencia sonora: {path}")
-            # Lanzar reproducción en hilo separado para no bloquear el pipeline
-            thread = threading.Thread(target=self._play_system, args=(str(path),), daemon=True)
-            thread.start()
-            return True
-        except Exception as e:
-            logger.error(f"Error al iniciar reproducción de audio: {e}")
-            return False
 
     @staticmethod
     def _play_system(file_path: str) -> None:

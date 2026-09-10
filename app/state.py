@@ -186,6 +186,11 @@ class SystemState:
         with self._lock:
             self._analysis_preview_urls = list(urls)
 
+    def set_frames_per_analysis(self, count: int) -> None:
+        """Sincroniza la cantidad de fotogramas configurada para cada análisis."""
+        with self._lock:
+            self._frames_per_analysis = count
+
     def set_manual_sequence_status(self, captured: int, ready: bool) -> None:
         """Actualiza el avance de la secuencia manual visible en el panel."""
         with self._lock:
