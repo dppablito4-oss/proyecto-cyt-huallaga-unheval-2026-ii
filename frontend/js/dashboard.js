@@ -17,7 +17,7 @@ const Dashboard = {
     this.updateManualRecognition(data);
     this.updateAiState(data);
     this.updateDecision(data.last_decision);
-    this.setText('last-diagnosis-text', data.last_diagnosis || 'Captura una secuencia manual para iniciar el análisis.');
+    this.setText('last-diagnosis-text', data.last_diagnosis || 'Esperando detección automática de arrojo de residuos.');
     this.setText('warning-text', data.last_warning_message || 'Sin advertencias emitidas.');
     this.renderPreview(data.analysis_preview_urls || [], data.ai_status);
     this.updatePendingAlert(data);
@@ -57,15 +57,10 @@ const Dashboard = {
   },
 
   updateCooldown(remaining) {
-    if (document.getElementById('btn-start-manual-recognition')) {
-      this.setText('cooldown-status', 'Manual');
-      this.setText('cooldown-footer', 'Modo manual: sin espera automática');
-      return;
-    }
     const ready = remaining <= 0;
     const text = ready ? 'Listo' : `${Math.ceil(remaining)} s`;
     this.setText('cooldown-status', text);
-    this.setText('cooldown-footer', ready ? 'Tiempo de espera: listo' : `Tiempo de espera: ${text}`);
+    this.setText('cooldown-footer', ready ? 'Monitoreo autónomo activo: listo' : `Tiempo de espera: ${text}`);
   },
 
   updateManualRecognition(data) {
@@ -150,7 +145,7 @@ const Dashboard = {
 
     if (!urls.length) {
       const message = document.createElement('p');
-      message.textContent = 'Presiona “Iniciar reconocimiento” para capturar cuatro imágenes.';
+      message.textContent = 'Las imágenes del evento detectado se mostrarán automáticamente aquí.';
       container.appendChild(message);
       return;
     }

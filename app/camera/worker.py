@@ -767,6 +767,31 @@ class VideoPipelineWorker:
                     "SEQUENCE",
                     f"[SECUENCIA] {len(jpeg_frames)} keyframes seleccionados alrededor de la liberación.",
                 )
+                if jpeg_frames:
+                    preview_dir = settings.DATA_DIR / "frames"
+                    preview_dir.mkdir(parents=True, exist_ok=True)
+                    preview_urls = []
+                    for idx, j_bytes in enumerate(jpeg_frames):
+                        p_name = f"auto-preview-{event.id[:8]}-{idx + 1}.jpg"
+                        (preview_dir / p_name).write_bytes(j_bytes)
+                        preview_urls.append(f"/api/cameras/analysis-preview/{p_name}")
+                    system_state.set_analysis_preview_urls(preview_urls)
+            elif not is_manual:
+                all_buffered = self._frame_buffer.get_all_frames()
+                if all_buffered:
+                    rel_ts = event.release_timestamp or event.started_at
+                    nearest_frame = min(
+                        all_buffered,
+                        key=lambda item: abs((item[0] - rel_ts).total_seconds()) if rel_ts else 0,
+                    )[1]
+                    with self._runtime_config_lock:
+                        j_bytes = self._image_processor.compress_jpeg(nearest_frame)
+                        jpeg_quality = self._image_processor.jpeg_quality
+                    preview_dir = settings.DATA_DIR / "frames"
+                    preview_dir.mkdir(parents=True, exist_ok=True)
+                    p_name = f"auto-preview-{event.id[:8]}-1.jpg"
+                    (preview_dir / p_name).write_bytes(j_bytes)
+                    system_state.set_analysis_preview_urls([f"/api/cameras/analysis-preview/{p_name}"])
 
             # 4. Actualizar metadata de captura
             event.capture.total_frames = len(jpeg_frames)

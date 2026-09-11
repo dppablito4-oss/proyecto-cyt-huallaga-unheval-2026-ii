@@ -167,7 +167,7 @@ class Settings(BaseModel):
             str(Path(__file__).resolve().parent.parent / "config" / "zones.json"),
         )
     )
-    VISION_DEBUG_OVERLAY: bool = os.getenv("VISION_DEBUG_OVERLAY", "False").lower() in (
+    VISION_DEBUG_OVERLAY: bool = os.getenv("VISION_DEBUG_OVERLAY", "True").lower() in (
         "true", "1", "yes"
     )
 
@@ -360,8 +360,8 @@ class Settings(BaseModel):
     SEQUENCE_FRAME_INTERVAL_SECONDS: float = float(os.getenv("SEQUENCE_FRAME_INTERVAL_SECONDS", "1"))
     # EVENT_COOLDOWN_SECONDS: Tiempo de espera en `app.events.cooldown.CooldownManager` para evitar llamadas repetidas
     EVENT_COOLDOWN_SECONDS: int = int(os.getenv("EVENT_COOLDOWN_SECONDS", "20"))
-    # Modo temporal de pruebas: la interfaz controla cuándo capturar y analizar.
-    MANUAL_RECOGNITION_MODE: bool = os.getenv("MANUAL_RECOGNITION_MODE", "True").lower() in ("true", "1", "yes")
+    # Modo de reconocimiento manual (desactivado por defecto para monitoreo autónomo).
+    MANUAL_RECOGNITION_MODE: bool = os.getenv("MANUAL_RECOGNITION_MODE", "False").lower() in ("true", "1", "yes")
     MANUAL_CAPTURE_FRAMES: int = int(os.getenv("MANUAL_CAPTURE_FRAMES", "4"))
     MANUAL_CAPTURE_INTERVAL_SECONDS: float = float(os.getenv("MANUAL_CAPTURE_INTERVAL_SECONDS", "1.5"))
 

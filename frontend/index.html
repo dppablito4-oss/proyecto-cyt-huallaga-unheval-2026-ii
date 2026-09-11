@@ -43,8 +43,6 @@
           </select>
         </label>
         <button class="btn btn-quiet" id="btn-start-pipeline">Iniciar cámara</button>
-        <button class="btn btn-primary" id="btn-start-manual-recognition">Iniciar reconocimiento</button>
-        <button class="btn btn-secondary" id="btn-send-manual-images" disabled>Enviar imágenes a IA</button>
         <button class="btn btn-danger" id="btn-stop-pipeline">Detener</button>
       </div>
     </header>
@@ -77,13 +75,13 @@
           <div class="panel-heading"><h2>Estado de la deteccion</h2><span class="decision-badge" id="last-decision-badge">En espera</span></div>
           <div class="metrics-grid">
             <div><span class="muted-label">Personas detectadas</span><strong id="persons-count">0</strong></div>
-            <div><span class="muted-label">Modo de reconocimiento</span><strong id="cooldown-status">Manual</strong></div>
+            <div><span class="muted-label">Tiempo de espera</span><strong id="cooldown-status">Listo</strong></div>
             <div><span class="muted-label">Estado de IA</span><strong id="ai-status-text">En reposo</strong></div>
             <div><span class="muted-label">Respuesta de IA</span><strong id="ai-latency-text">-- s</strong></div>
           </div>
           <div class="result-row">
             <span class="muted-label">Ultimo diagnostico</span>
-            <p id="last-diagnosis-text">Captura una secuencia manual para iniciar el análisis.</p>
+            <p id="last-diagnosis-text">Esperando detección automática de arrojo de residuos.</p>
           </div>
           <div class="result-row warning-row">
             <span class="muted-label">Ultima advertencia</span>
@@ -132,7 +130,7 @@
         <div class="panel-heading"><div><h2>Registro en tiempo real</h2><p class="panel-note">La secuencia se muestra antes de enviarla a la IA.</p></div><div class="panel-actions"><button class="btn btn-secondary" id="btn-export-pdf">Exportar PDF</button><button class="btn btn-quiet" id="btn-clear-logs">Limpiar</button></div></div>
         <section class="sequence-section" aria-live="polite">
           <div class="sequence-heading"><span>Secuencia preparada para IA</span><span id="sequence-status-text">Aun no hay una secuencia</span></div>
-          <div id="analysis-preview" class="analysis-preview"><p>Presiona “Iniciar reconocimiento” para capturar cuatro imágenes.</p></div>
+          <div id="analysis-preview" class="analysis-preview"><p>Las imágenes del evento detectado se mostrarán automáticamente aquí.</p></div>
         </section>
         <div class="terminal-container" id="live-logs-container" aria-label="Registros del sistema">
           <div class="log-line log-INFO"><span class="log-time">[--:--:--]</span><span class="log-text">Interfaz lista. Esperando actividad.</span></div>
@@ -140,7 +138,7 @@
         <div class="terminal-footer">
           <div class="terminal-brand-footer">
             <img src="assets/isotipo_sivarh_trans.png" alt="SIVARH" class="terminal-logo-icon">
-            <span id="cooldown-footer">Modo manual: listo para capturar</span>
+            <span id="cooldown-footer">Monitoreo autónomo activo</span>
           </div>
           <span id="log-count-text">0 registros</span>
         </div>
