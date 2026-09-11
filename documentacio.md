@@ -1,1871 +1,352 @@
-# 1. Nombre provisional
+# SIVARH: Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga
+## Documentación Técnica Oficial y Arquitectura del Sistema (v2)
 
-**SIVARH: Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga orientado a la detección preventiva del arrojo directo de residuos sólidos, sector Puente Huallaga – UNHEVAL**
-
-Versión inicial:
-
-**0.1 — Prototipo experimental local**
+**Orientado a la detección preventiva del arrojo directo de residuos sólidos, sector Puente Huallaga – UNHEVAL**  
+*Proyecto de Investigación Aplicada en Ciencia y Tecnología (CyT) — Universidad Nacional Hermilio Valdizán (UNHEVAL), Huánuco, Perú (2026-II)*
 
 ---
 
-## Estado y alcance de este documento
+## Resumen Ejecutivo
 
-Este archivo combina la especificación original con la hoja de ruta del proyecto. No todas las capacidades descritas se consideran terminadas.
+**SIVARH** es un sistema inteligente de monitoreo y disuasión ambiental diseñado para operar en el borde (*Edge Computing*) en zonas críticas de las riberas del río Huallaga. Su objetivo fundamental es la **intervención preventiva pre-impacto**: detectar conductas de arrojo deliberado o negligente de residuos sólidos (*littering*) y emitir un estímulo auditivo disuasorio (*nudge* cognitivo) en tiempo real para provocar el desistimiento del infractor antes de que el desecho alcance el agua o la faja marginal.
 
-**Implementado actualmente:** cámara USB/RTSP/video, YOLO para personas, buffer temporal muestreado, selección y compresión de frames, análisis multimodal estructurado, decisión, TTS, SQLite, API, WebSocket y dashboard. La captura y el análisis se ejecutan en hilos separados para evitar congelar el video, con un solo evento activo a la vez.
-
-**Previsto para fases posteriores:** métricas experimentales completas, conjunto de videos etiquetados, tracking, pose, segmentación, reconexión robusta, autenticación, configuración totalmente dinámica y soporte escalable para múltiples cámaras.
-
-El buffer actual conserva por defecto 5 muestras por segundo durante 5 segundos. Esto limita el uso aproximado de frames crudos a 25 imágenes, aunque la cámara opere a una tasa mayor.
+A diferencia de las cámaras de seguridad convencionales o los detectores pasivos, SIVARH integra una arquitectura híbrida de visión artificial local (YOLOv8 + ByteTrack + estimación de pose + zonificación poligonal) y razonamiento semántico multimodal en la nube (OpenAI Vision GPT-5.6 Luna / GPT-4o) con síntesis de voz en streaming ultra-rápido (OpenAI TTS).
 
 ---
 
-# 2. Objetivo técnico del sistema
+## 1. Evolución del Sistema: De Detector Básico a Sistema Autónomo Espaciotemporal
 
-Construir un sistema modular capaz de:
+Para comprender el diseño actual de SIVARH, es clave examinar la transición tecnológica experimentada por el proyecto:
 
-1. recibir video desde una cámara;
-2. detectar localmente la presencia de personas;
-3. mantener un pequeño buffer temporal de fotogramas;
-4. identificar cuándo existe un evento potencialmente relevante;
-5. seleccionar una secuencia corta de imágenes;
-6. comprimirlas;
-7. enviarlas a una IA multimodal;
-8. recibir un resultado estructurado;
-9. decidir si corresponde emitir una advertencia;
-10. generar dinámicamente el texto de la advertencia;
-11. convertir el texto a voz;
-12. reproducir el audio;
-13. mostrar todo el estado del sistema mediante una interfaz web;
-14. preparar y, en una fase posterior, registrar métricas completas para los experimentos.
-
-El prototipo debe diseñarse de manera que posteriormente la webcam pueda reemplazarse por cámaras IP/RTSP sin modificar la lógica principal.
-
----
-
-# 3. Principio de arquitectura
-
-Separar completamente:
-
-- adquisición de video;
-- detección local;
-- almacenamiento temporal;
-- selección de imágenes;
-- análisis mediante IA;
-- generación de voz;
-- reproducción;
-- API web;
-- interfaz gráfica;
-- métricas.
-
-Ningún módulo debería depender directamente de detalles internos de otro módulo.
-
-Ejemplo:
-
-```text
-CameraSource
-      ↓
-FrameBuffer
-      ↓
-LocalDetector
-      ↓
-EventManager
-      ↓
-FrameSelector
-      ↓
-ImageProcessor
-      ↓
-VisionAI
-      ↓
-DecisionEngine
-      ↓
-SpeechService
-      ↓
-AudioOutput
+```
+┌─────────────────────────────────────────────────┐
+│              FASE 1: PROTOTIPO BÁSICO           │
+│  • Detección simple de personas (YOLOv1-like)   │
+│  • Disparo ciego de alertas por presencia        │
+│  • Alto índice de falsos positivos               │
+│  • Sin memoria temporal ni contexto espacial    │
+└────────────────────────┬────────────────────────┘
+                         │
+                         ▼ Evolución arquitectónica
+┌─────────────────────────────────────────────────┐
+│        FASE 2 ACTUAL: SISTEMA AUTÓNOMO SIVARH   │
+│  • Detección multiclase (personas + residuos)   │
+│  • Tracking persistente ByteTrack (IDs únicos)  │
+│  • Memoria cinemática y trayectorias (15s)      │
+│  • Zonificación poligonal (Ribera / Alerta)     │
+│  • Asociación persona-objeto espaciotemporal   │
+│  • Estimación de pose (análisis biomecánico)   │
+│  • Buffer circular en RAM y selección uniforme │
+│  • Razonamiento multimodal estructurado (VLM)   │
+│  • Decisión de 3 niveles y Nudge de voz (TTS)  │
+│  • Dashboard interactivo (Modo Manual y Auto)  │
+└─────────────────────────────────────────────────┘
 ```
 
-En paralelo:
+### 1.1. El Prototipo Inicial (Fase 1: Reactivo Básico)
+En su concepción inicial, el sistema operaba bajo un modelo ingenuo y reactivo:
+- **Mecanismo:** Cada vez que el detector local identificaba a una persona dentro del campo visual de la cámara, disparaba un evento y generaba una llamada a la API o un mensaje de advertencia.
+- **Limitaciones críticas encontradas:**
+  1. **Tasa inaceptable de falsos positivos:** El mero tránsito de estudiantes, deportistas o peatones por el Malecón Walker Soberón o el Puente Huallaga detonaba alarmas continuas, aun cuando nadie arrojaba nada.
+  2. **Ceguera de objeto:** El sistema no distinguía si la persona portaba un residuo, una mochila de estudio o nada en absoluto.
+  3. **Ausencia de memoria temporal:** Cada fotograma se evaluaba de forma aislada, sin capacidad de rastrear trayectorias, persistencia ni separación de objetos.
+  4. **Costos y saturación:** Disparar análisis externos por cada persona detectada saturaba el ancho de banda y multiplicaba innecesariamente los costos de cómputo en la nube.
 
-```text
-SystemState
-      ↓
-FastAPI
-      ↓
-WebSocket
-      ↓
-Dashboard HTML/JS
-```
+### 1.2. El Sistema Actual (Fase 2: Autónomo, Espaciotemporal y Multimodal)
+Para superar estas fallas estructurales, SIVARH evolucionó hacia una solución autónoma multi-etapa:
+1. **Detección Multiclase Local:** Detección simultánea de personas y clases representativas de residuos comunes (`bottle`, `cup`, `backpack`, `handbag`).
+2. **Seguimiento Multi-Objeto (ByteTrack):** Asignación de identidades temporales anónimas y estables a través del tiempo, permitiendo conocer si una persona acaba de ingresar, permanece estática o se retira.
+3. **Memoria de Trayectoria (`TrackHistory`):** Almacenamiento acotado (15 segundos) de las coordenadas de cada entidad con purga automática por TTL (Time-To-Live).
+4. **Zonificación Espacial Semántica (`ZoneManager`):** Segmentación del encuadre en zonas poligonales configurables (ej. *Zona Ribera/Peligro*, *Zona Observación*, *Zona Segura/Vía Pública*). Solo las interacciones que ocurren en o hacia la faja marginal pueden progresar.
+5. **Motor de Asociación Persona–Objeto (`AssociationEngine`):** Evaluación espaciotemporal de cercanía e interacción entre personas y objetos sospechosos.
+6. **Infraestructura de Pose Biomecánica (`pose.py`):** Detección de puntos clave de brazos y muñecas para reconocer posturas preparatorias de lanzamiento o desprendimiento.
+7. **Buffer Circular Muestreado (5 fps / 5s):** Conservación en memoria RAM de los instantes inmediatamente previos y posteriores al evento (máximo 25 fotogramas), optimizando drásticamente el consumo de RAM.
+8. **Selección Inteligente de Cuadros (`FrameSelector`):** Selección cronológica de 4 a 7 cuadros clave representativos de la secuencia de acción (antes, durante y después).
+9. **Razonamiento Multimodal Estricto (OpenAI Vision GPT-5.6 / GPT-4o):** Evaluación de la secuencia temporal completa bajo un contrato Pydantic tipado (`AIAnalysisResult`), distinguiendo explícitamente entre:
+   - Portar un objeto (permitido).
+   - Manipular un objeto (observación).
+   - Soltar, abandonar o arrojar un residuo (infracción confirmada).
+10. **Motor de Decisión Gradual (`DecisionEngine`):** Clasificación en tres categorías operativas: `IGNORE`, `LOG_ONLY` y `WARN`.
+11. **Disuasión Auditiva Contextual (`SpeechService` + `AudioOutput`):** Emisión instantánea por altavoz de un *nudge* disuasorio generado con voz humana sintética de alta fidelidad.
+12. **Doble Modo Operativo en Dashboard:**
+    - *Modo Autónomo:* Monitoreo continuo desatendido con cooldown anti-saturación de 20 segundos.
+    - *Modo Manual de Campo:* Herramienta controlada para calibración in situ, donde el operador dispara ráfagas de 4 capturas a intervalos fijos de 1.5s y valida la respuesta del modelo VLM.
 
 ---
 
-# 4. Arquitectura general del prototipo
+## 2. Justificación Científica y Delimitación del Alcance
 
-```text
-                    CÁMARA
-                      │
-                      ▼
-                CameraSource
-                      │
-                      ▼
-                 OpenCV
-                      │
-              flujo de frames
-                      │
-         ┌────────────┴────────────┐
-         │                         │
-         ▼                         ▼
-   LocalDetector              FrameBuffer
-      YOLO                  últimos segundos
-         │                         │
-         └────────────┬────────────┘
-                      │
-                      ▼
-                 EventManager
-                      │
-             evento sospechoso
-                      │
-                      ▼
-                 FrameSelector
-                      │
-              3 / 5 / 8 frames
-                      │
-                      ▼
-                ImageProcessor
-             resize / crop / JPEG
-                      │
-                      ▼
-                   VisionAI
-                OpenAI API
-                      │
-                      ▼
-              respuesta JSON
-                      │
-                      ▼
-               DecisionEngine
-                │           │
-              NO            SÍ
-                │           │
-               fin          ▼
-                       SpeechService
-                            │
-                            ▼
-                         AUDIO
-                            │
-                            ▼
-                       🔊 parlante
-```
+### 2.1. Contexto Territorial: Cuenca Media del Río Huallaga
+La zona de estudio comprende el corredor fluvial que divide los distritos metropolitanos de **Huánuco, Amarilis y Pillco Marca**, con epicentro en:
+- **Puente Huallaga:** Conector vial masivo interdistrital.
+- **Malecón Walker Soberón y Malecón Huallaga:** Vías peatonales y vehiculares ribereñas.
+- **Acceso a la Ciudad Universitaria UNHEVAL (Cayhuayna):** Flujo diario de miles de estudiantes y transeúntes.
 
-La interfaz funciona en paralelo:
+Los reportes del Organismo de Evaluación y Fiscalización Ambiental (OEFA) y la Fiscalía Especializada en Materia Ambiental (FEMA) identifican más de **216 puntos críticos** de acumulación de basura en la cuenca del Huallaga en Huánuco, con una generación diaria de **100 a 120 toneladas de residuos**.
 
-```text
-Todos los módulos
-       ↓
-   SystemState
-       ↓
-    FastAPI
-       ↓
- WebSocket / REST
-       ↓
-HTML + CSS + JavaScript
-```
+### 2.2. Delimitación Estricta de Fuentes de Contaminación
+Para mantener la viabilidad técnica y científica, SIVARH define con rigor su frontera de intervención:
+
+| Fuente Contaminante | Mecanismo | Alcance en SIVARH |
+| :--- | :--- | :---: |
+| **1. Disposición directa por personas (*Littering*)** | Arrojo manual e intencional de botellas PET, bolsas plásticas y empaques en la ribera. | **ENFOQUE EXCLUSIVO** |
+| **2. Basura arrastrada por la corriente** | Residuos flotantes transportados desde cuencas altas en época de crecida. | Fuera de alcance (requiere dragado/mallas) |
+| **3. Efluentes de aguas residuales** | Descargas cloacales domiciliarias e industriales (ej. Camal). | Fuera de alcance (requiere PTAR) |
+| **4. Escombros clandestinos con volquetes** | Descarga pesada nocturna en fajas marginales. | Fuera de alcance inicial (requiere fiscalización policial) |
+| **5. Lixiviados y agroquímicos** | Filtraciones de botaderos (Chilepampa) y pesticidas agrícolas. | Fuera de alcance algorítmico |
+
+### 2.3. Fundamento Psico-Conductual: Los *Nudges* Cognitivos
+Las campañas de limpieza comunitaria periódicas son valiosas pero de efecto efímero: a los pocos días el punto crítico vuelve a regenerarse por la reincidencia conductual.
+
+SIVARH se fundamenta en la **Teoría del Pensamiento Dual (Daniel Kahneman)**:
+- El acto de arrojar un residuo suele ejecutarse mediante el **Sistema 1 (automático, impulsivo, inconsciente)** al aprovechar la dilución del anonimato.
+- La advertencia auditiva inmediata y personalizada en el instante previo a soltar el objeto actúa como un **estímulo disuasorio (*nudge*)** que despierta el **Sistema 2 (reflexivo y consciente)**.
+- El infractor se percata de que ha sido detectado (*shame effect*), perdiendo la sensación de impunidad y desistiendo de completar la infracción.
 
 ---
 
-# 5. Tecnologías principales
+## 3. Arquitectura del Sistema Tecnológico
 
-## Backend
+SIVARH está construido bajo el principio de **separación estricta de responsabilidades** y **concurrencia sin bloqueo**:
 
-**Python 3.12+**
-
-Evitar inicialmente versiones demasiado nuevas si existen incompatibilidades con PyTorch, CUDA o paquetes de visión.
-
----
-
-# 6. Librerías Python
-
-## 6.1 FastAPI
-
-Paquete:
-
-```text
-fastapi
+```
+                       CÁMARA (USB / RTSP / Video MP4)
+                                     │
+                                     ▼
+                        CameraSource (OpenCV DSHOW)
+                                     │
+                             Flujo continuo (30 FPS)
+                                     │
+                ┌────────────────────┴────────────────────┐
+                ▼                                         ▼
+        VideoPipelineWorker                      FrameBuffer Circular
+    (Hilo secundario desacoplado)              (5 muestras/seg durante 5s)
+                │                                         │
+        ┌───────┴───────────────────────┐                 │
+        ▼                               ▼                 │
+    YOLOv8 Local                 ByteTrack Tracker        │
+(Personas y Objetos)          (IDs únicos temporales)     │
+        │                               │                 │
+        └───────────────┬───────────────┘                 │
+                        ▼                                 │
+                   SceneState                             │
+        (Zonas poligonales + Ocupación)                   │
+                        │                                 │
+                        ▼                                 │
+                AssociationEngine                         │
+          (Relación Persona - Objeto)                     │
+                        │                                 │
+                        ▼                                 │
+             ¿Condición de Evento? ───────────────────────┤
+                        │ (Sí: Modo Auto o Manual)        │
+                        ▼                                 ▼
+                  FrameSelector <─────────────────────────┘
+             (3, 4, 5 u 8 cuadros clave)
+                        │
+                        ▼
+                 ImageProcessor
+           (Resize 960w + JPEG 70 + B64)
+                        │
+                        ▼
+              OpenAI Vision Client
+          (GPT-5.6 Luna / Structured Output)
+                        │
+                        ▼
+                 DecisionEngine
+         (Clasificación: IGNORE / LOG / WARN)
+                        │
+                        ├── WARN ─────────────────────────┐
+                        ▼                                 ▼
+                  SpeechService                      AudioOutput
+              (OpenAI TTS en streaming)            (Altavoz Local)
+                        │
+                        ▼
+                 Database (SQLite)
+             (Registro de auditoría)
+                        │
+                        ▼
+             WebSocket -> Dashboard Web
 ```
 
-Responsabilidad:
-
-- servidor HTTP;
-- endpoints REST;
-- servir estado del sistema;
-- configuración;
-- pruebas manuales;
-- comunicación con frontend;
-- WebSockets.
-
-NO debe realizar directamente detección de objetos.
-
----
-
-## 6.2 Uvicorn
-
-```text
-uvicorn[standard]
-```
-
-Servidor ASGI utilizado para ejecutar FastAPI.
-
-Ejemplo conceptual:
-
-```text
-uvicorn app.main:app --reload
-```
-
----
-
-# 6.3 OpenCV
-
-```text
-opencv-python
-```
-
-Responsabilidades:
-
-- abrir webcam;
-- recibir streams;
-- manipular frames;
-- resize;
-- crop;
-- JPEG;
-- mostrar/debuggear imágenes;
-- lectura de video grabado.
-
-Fuente inicial:
-
-```text
-cv2.VideoCapture(0)
-```
-
-La arquitectura debe permitir posteriormente:
-
-```text
-cv2.VideoCapture("rtsp://...")
-```
-
-Por eso NO escribir lógica de negocio directamente alrededor de `VideoCapture`.
-
-Crear una abstracción `CameraSource`.
+### 3.1. Hilos y Concurrencia
+- **Hilo ASGI / FastAPI:** Atiende peticiones HTTP REST y difunde actualizaciones por WebSockets sin demoras.
+- **Hilo de Cámara (`VideoPipelineWorker`):** Captura fotogramas a tasa completa de la cámara, corre inferencias locales rápidas de detección y actualiza el estado global (`SystemState`).
+- **Hilo de Análisis IA Asíncrono:** Cuando se dispara un evento, la preparación de fotogramas, la llamada remota a la API de OpenAI y la síntesis de audio se procesan sin detener la captura de video en vivo ni la interfaz.
 
 ---
 
-# 6.4 Ultralytics YOLO
+## 4. Módulos del Sistema y Responsabilidades
 
-```text
-ultralytics
-```
-
-Responsabilidad inicial:
-
-**detección de personas.**
-
-NO intentar todavía entrenar un modelo para detectar acciones de arrojo de basura.
-
-YOLO inicialmente solo funciona como filtro barato:
-
-```text
-¿hay una persona?
-```
-
-Si no:
-
-```text
-NO ejecutar IA multimodal
-```
-
-Si sí:
-
-```text
-posible evento → capturar contexto
-```
-
-Debe ser posible modificar posteriormente:
-
-- modelo;
-- threshold;
-- clases;
-- tracker.
-
-El paquete de Ultralytics acepta imágenes, ndarray de OpenCV, webcam, video y streams como entrada.
+| Módulo | Ruta de Código | Responsabilidad Técnica |
+| :--- | :--- | :--- |
+| **Servidor Principal** | [`app/main.py`](app/main.py) | Inicialización FastAPI, montaje de estáticos, rutas API y ciclo de vida de la aplicación. |
+| **Configuración** | [`app/config.py`](app/config.py) | Centralización tipada mediante Pydantic Settings de variables de entorno (`.env`). |
+| **Estado Global** | [`app/state.py`](app/state.py) | Instancia singleton reactiva `system_state` con observadores y notificaciones WebSocket. |
+| **Abstracción de Video** | [`app/camera/`](app/camera/) | Control de cámaras USB (`usb_camera.py`), streams IP (`rtsp_camera.py`) y archivos de prueba (`video_file.py`). |
+| **Worker del Pipeline** | [`app/camera/worker.py`](app/camera/worker.py) | Bucle principal de adquisición, despacho de frames al buffer, llamada a YOLO y control de modo manual. |
+| **Detector Local** | [`app/vision/detector.py`](app/vision/detector.py) | Inferencia con Ultralytics YOLOv8 para `person`, `bottle`, `cup`, `backpack`, `handbag`. |
+| **Rastreo (Tracker)** | [`app/vision/tracker.py`](app/vision/tracker.py) | Adaptador de ByteTrack para asociación frame-a-frame de identidades temporales continuas. |
+| **Zonificación** | [`app/vision/zones.py`](app/vision/zones.py) | Gestor de polígonos normalizados, comprobación punto-en-polígono y cálculo de ocupación por zona. |
+| **Historial Cinemático** | [`app/vision/track_history.py`](app/vision/track_history.py) | Registro de posiciones pasadas, cálculo de velocidad y purga automática por TTL. |
+| **Asociación** | [`app/vision/associations.py`](app/vision/associations.py) | Detección de proximidad, solapamiento y correlación espacial entre personas y residuos. |
+| **Pose Biomecánica** | [`app/vision/pose.py`](app/vision/pose.py) | Esqueleto corporal para análisis de ángulos de hombros, codos y muñecas en ademanes de tiro. |
+| **Buffer de Fotogramas** | [`app/vision/frame_buffer.py`](app/vision/frame_buffer.py) | Cola doble (`collections.deque`) muestreada en memoria RAM (5 fps, 5 segundos). |
+| **Selector de Cuadros** | [`app/vision/frame_selector.py`](app/vision/frame_selector.py) | Algoritmo de sub-muestreo temporal uniforme para extraer secuencias compactas. |
+| **Compresión** | [`app/vision/image_processor.py`](app/vision/image_processor.py) | Reescalado a resolución óptima, compresión JPEG al 70% y serialización Base64. |
+| **Cliente VLM** | [`app/ai/vision_client.py`](app/ai/vision_client.py) | Envío de secuencias a OpenAI Vision (GPT-5.6 Luna) y parseo estricto del esquema JSON. |
+| **Motor de Decisión** | [`app/events/decision_engine.py`](app/events/decision_engine.py) | Reglas de negocio para clasificar en `IGNORE`, `LOG_ONLY` o `WARN` según umbrales de confianza. |
+| **Síntesis de Voz** | [`app/speech/tts_service.py`](app/speech/tts_service.py) | Generación de audio mediante OpenAI TTS con soporte de streaming PCM de baja latencia. |
+| **Reproducción Local** | [`app/speech/audio_output.py`](app/speech/audio_output.py) | Emisión física del audio a través de los altavoces de la estación de borde. |
+| **Almacenamiento** | [`app/storage/database.py`](app/storage/database.py) | Base de datos SQLite para auditoría forense de eventos, imágenes clave y decisiones. |
+| **Dashboard Frontend** | [`frontend/`](frontend/) | Interfaz gráfica web moderna con streaming en vivo, métricas, controles y visualizador de secuencias. |
 
 ---
 
-# 6.5 OpenAI SDK
+## 5. Modelos de Datos y Contratos Formales (Pydantic)
 
-```text
-openai
+### 5.1. Contrato del Análisis Multimodal (`AIAnalysisResult`)
+El modelo de visión artificial responde obligatoriamente bajo este esquema validado:
+
+```python
+class AIAnalysisResult(BaseModel):
+    person_detected: bool          # ¿Hay al menos una persona visible en la secuencia?
+    suspected_disposal: bool       # ¿Hay un ademán o acción sospechosa de arrojo?
+    action_completed: bool         # ¿El residuo quedó efectivamente desprendido/abandonado?
+    confidence: float              # Grado de certeza de la inferencia (0.00 a 1.00)
+    diagnosis: str                 # Diagnóstico técnico en 1 o 2 oraciones
+    suggested_warning: str | None  # Frase disuasoria recomendada para el infractor
+    reasoning: str | None          # Justificación paso a paso de la conclusión visual
 ```
 
-Responsabilidad:
-
-realizar llamadas desde Python hacia la API multimodal.
-
-La API key debe cargarse desde:
-
-```text
-.env
-```
-
-Nunca desde:
-
-```text
-frontend/app.js
-```
-
-Nunca hardcodearla en Git.
-
-Variable:
-
-```text
-OPENAI_API_KEY=
-```
-
-Modelo configurable:
-
-```text
-OPENAI_VISION_MODEL=
-```
-
-No hardcodear el modelo en varios archivos.
-
-Debe existir UNA sola configuración central.
+### 5.2. Reglas del Motor de Decisión (`DecisionEngine`)
+La transición del resultado a una acción física sigue una lógica rigurosa:
+- **`IGNORE`:** Si `suspected_disposal == False` o la confianza no alcanza el umbral mínimo (0.40). No se emite audio ni se alerta.
+- **`LOG_ONLY`:** Si hay sospecha pero `action_completed == False` o la confianza es intermedia (0.40 ≤ conf < 0.80). Se guarda registro fotográfico y forense en SQLite para análisis, pero no se emite audio para evitar falsos positivos hacia el transeúnte.
+- **`WARN`:** Si `action_completed == True` y `confidence >= 0.80` (umbral configurable en `.env`). Se activa de inmediato el `SpeechService` para reproducir la advertencia y se marca el evento como alerta activa en el dashboard.
 
 ---
 
-# 6.6 Pillow
+## 6. Endpoints de la API REST y WebSockets
 
-```text
-Pillow
-```
+### 6.1. Endpoints de Control y Estado
+| Método | Ruta | Descripción |
+| :---: | :--- | :--- |
+| `GET` | `/api/status` | Retorna el estado global del sistema: cámara, tracks, FPS, métricas y logs recientes. |
+| `POST` | `/api/system/start` | Inicia la cámara y el worker de procesamiento de video. |
+| `POST` | `/api/system/stop` | Detiene la cámara y el worker de video. |
+| `GET` | `/api/events` | Lista los eventos históricos almacenados en la base de datos SQLite. |
+| `GET` | `/api/events/{id}` | Retorna el detalle completo de un evento específico, incluyendo fotogramas clave. |
+| `GET` | `/api/config` | Obtiene la configuración actual del sistema en tiempo de ejecución. |
+| `PATCH`| `/api/config` | Modifica dinámicamente parámetros de configuración en caliente. |
 
-Puede utilizarse para:
+### 6.2. Endpoints para Modo Manual y Depuración
+| Método | Ruta | Descripción |
+| :---: | :--- | :--- |
+| `POST` | `/api/system/manual/start-recognition` | Inicia la ráfaga de 4 capturas automáticas espaciadas por 1.5s. |
+| `POST` | `/api/system/manual/send-images` | Envía la secuencia capturada a OpenAI Vision para su análisis y decisión. |
+| `POST` | `/api/debug/test-speech` | Prueba la síntesis de voz OpenAI TTS y la reproducción por el altavoz. |
+| `POST` | `/api/debug/test-vision` | Prueba el cliente multimodal con una imagen estática de prueba. |
 
-- manipular imágenes;
-- convertir formatos;
-- crear contact sheets;
-- realizar pruebas de compresión.
-
-OpenCV seguirá siendo la herramienta principal para procesamiento de video.
-
----
-
-# 6.7 Pydantic
-
-FastAPI ya depende de Pydantic.
-
-Utilizarlo explícitamente para definir:
-
-- eventos;
-- resultados IA;
-- configuración;
-- métricas;
-- estado del sistema.
-
-Ejemplo conceptual:
-
-```text
-AIAnalysisResult
-Event
-CameraStatus
-SystemMetrics
-```
+### 6.3. Comunicación en Tiempo Real
+- **WebSocket `/ws/status`:** Envía pulsos de telemetría continuos (JSON) al frontend con: FPS real, número de personas y objetos detectados, ocupación por zona, tracks activos, estado de la IA y logs del sistema.
+- **Streaming de Video `/video_feed`:** Transmisión MJPEG en vivo con bounding boxes, zonas y overlays de depuración opcionales.
 
 ---
 
-# 6.8 python-dotenv
+## 7. Configuración del Sistema (.env)
 
-```text
-python-dotenv
-```
+Los parámetros principales que gobiernan el comportamiento operativo de SIVARH se configuran en el archivo `.env`:
 
-Responsabilidad:
-
-cargar configuración local desde `.env`.
-
----
-
-# 6.9 httpx
-
-```text
-httpx
-```
-
-Puede utilizarse para futuras llamadas HTTP externas distintas al SDK principal.
-
-No utilizar `requests` y `httpx` mezclados sin necesidad.
-
-Preferir `httpx` por compatibilidad async.
-
----
-
-# 6.10 NumPy
-
-```text
-numpy
-```
-
-Necesario para manipulación eficiente de frames.
-
-OpenCV ya trabaja principalmente con arrays NumPy.
-
----
-
-# 6.11 logging
-
-Utilizar el módulo estándar:
-
-```text
-logging
-```
-
-NO llenar el proyecto de:
-
-```text
-print(...)
-```
-
-Crear logs separados por nivel:
-
-```text
-INFO
-WARNING
-ERROR
-DEBUG
-```
-
----
-
-# 7. Text-to-Speech
-
-Crear una interfaz:
-
-```text
-SpeechService
-```
-
-Primera implementación:
-
-```text
-OpenAISpeechService
-```
-
-Debe recibir solamente:
-
-```text
-texto
-```
-
-y devolver:
-
-```text
-archivo/ruta/audio bytes
-```
-
-El endpoint oficial `/v1/audio/speech` permite generar audio a partir de texto.
-
-NO mezclar la generación TTS dentro del módulo VisionAI.
-
-La IA de visión genera:
-
-```text
-mensaje_advertencia
-```
-
-El módulo TTS convierte:
-
-```text
-mensaje_advertencia → audio
-```
-
----
-
-# 8. Reproducción de audio
-
-Crear:
-
-```text
-AudioOutput
-```
-
-Responsabilidad:
-
-reproducir audio generado.
-
-Primera versión:
-
-altavoces conectados a la PC.
-
-No implementar todavía megáfono IP.
-
-Debe poder reemplazarse posteriormente por:
-
-```text
-LocalSpeakerOutput
-IPSpeakerOutput
-HTTPAudioOutput
-```
-
----
-
-# 9. Estructura de carpetas propuesta
-
-```text
-huallaga-ai-monitor/
-│
-├── app/
-│   │
-│   ├── main.py
-│   │
-│   ├── config.py
-│   │
-│   ├── state.py
-│   │
-│   ├── dependencies.py
-│   │
-│   ├── models/
-│   │   ├── event.py
-│   │   ├── analysis.py
-│   │   ├── camera.py
-│   │   └── metrics.py
-│   │
-│   ├── camera/
-│   │   ├── base.py
-│   │   ├── usb_camera.py
-│   │   ├── rtsp_camera.py
-│   │   └── video_file.py
-│   │
-│   ├── vision/
-│   │   ├── detector.py
-│   │   ├── tracker.py
-│   │   ├── frame_buffer.py
-│   │   ├── frame_selector.py
-│   │   └── image_processor.py
-│   │
-│   ├── events/
-│   │   ├── manager.py
-│   │   ├── rules.py
-│   │   └── cooldown.py
-│   │
-│   ├── ai/
-│   │   ├── vision_client.py
-│   │   ├── schemas.py
-│   │   ├── prompts.py
-│   │   └── model_config.py
-│   │
-│   ├── speech/
-│   │   ├── service.py
-│   │   ├── openai_tts.py
-│   │   └── audio_output.py
-│   │
-│   ├── api/
-│   │   ├── routes/
-│   │   │   ├── status.py
-│   │   │   ├── events.py
-│   │   │   ├── cameras.py
-│   │   │   ├── config.py
-│   │   │   └── debug.py
-│   │   │
-│   │   └── websocket.py
-│   │
-│   ├── metrics/
-│   │   ├── collector.py
-│   │   ├── network.py
-│   │   └── latency.py
-│   │
-│   ├── storage/
-│   │   ├── events_repository.py
-│   │   └── local_repository.py
-│   │
-│   └── utils/
-│       ├── ids.py
-│       ├── time.py
-│       └── files.py
-│
-├── frontend/
-│   ├── index.html
-│   ├── css/
-│   │   └── app.css
-│   └── js/
-│       ├── app.js
-│       ├── api.js
-│       ├── websocket.js
-│       └── dashboard.js
-│
-├── prompts/
-│   └── environmental_event.txt
-│
-├── data/
-│   ├── events/
-│   ├── frames/
-│   ├── audio/
-│   └── test_videos/
-│
-├── tests/
-│   ├── test_frame_selector.py
-│   ├── test_image_processor.py
-│   ├── test_ai_schema.py
-│   └── test_event_manager.py
-│
-├── scripts/
-│   ├── test_camera.py
-│   ├── test_yolo.py
-│   ├── test_openai.py
-│   └── benchmark_images.py
-│
-├── .env.example
-├── .gitignore
-├── requirements.txt
-├── README.md
-└── pyproject.toml
-```
-
----
-
-# 10. Responsabilidad de cada módulo
-
-## CameraSource
-
-Interfaz abstracta.
-
-Debe proporcionar algo conceptualmente equivalente a:
-
-```text
-open()
-read()
-close()
-get_metadata()
-```
-
-No debe conocer YOLO.
-
----
-
-# 11. UsbCamera
-
-Implementación inicial.
-
-Entrada:
-
-```text
-camera_index = 0
-```
-
-Devuelve frames OpenCV.
-
----
-
-# 12. RtspCamera
-
-Crear solamente la estructura inicialmente.
-
-No hace falta implementarla completamente durante el primer sprint.
-
-Permitirá después:
-
-```text
-rtsp://usuario:password@ip/stream
-```
-
----
-
-# 13. VideoFile
-
-Muy importante para investigación.
-
-Permite ejecutar repetidamente exactamente el mismo evento.
-
-Ejemplo:
-
-```text
-persona_tira_botella_001.mp4
-```
-
-Esto facilita comparar:
-
-- modelos;
-- número de frames;
-- compresión;
-- prompts.
-
-La webcam NO sirve como único origen de pruebas porque nunca reproduce exactamente la misma situación.
-
----
-
-# 14. FrameBuffer
-
-Mantendrá los últimos N segundos del video en RAM.
-
-Ejemplo:
-
-```text
-BUFFER_SECONDS=5
-```
-
-No almacenar video continuamente en disco.
-
-Conceptualmente:
-
-```text
-deque(maxlen=N)
-```
-
-Debe guardar:
-
-```text
-timestamp
-frame
-```
-
----
-
-# 15. LocalDetector
-
-Primera versión:
-
-YOLO.
-
-Responsabilidad:
-
-```text
-detectar personas
-```
-
-Salida conceptual:
-
-```json
-{
-  "persons": 1,
-  "detections": [
-    {
-      "class": "person",
-      "confidence": 0.92,
-      "bbox": []
-    }
-  ]
-}
-```
-
-No decidir:
-
-```text
-esta persona arrojó basura
-```
-
-Eso corresponde al análisis multimodal.
-
----
-
-# 16. Tracker
-
-Inicialmente opcional.
-
-Crear interfaz pero permitir dejarlo desactivado.
-
-Posteriormente permitirá mantener:
-
-```text
-person_id=3
-```
-
-a través de varios frames.
-
-Podrían utilizarse trackers compatibles con Ultralytics como ByteTrack.
-
----
-
-# 17. EventManager
-
-Es el coordinador local.
-
-Ejemplo de lógica:
-
-```text
-frame
-↓
-persona detectada
-↓
-¿existe evento activo?
-↓
-NO
-↓
-crear evento
-↓
-obtener frames previos del buffer
-↓
-continuar capturando algunos segundos
-↓
-cerrar evento
-↓
-enviar a FrameSelector
-```
-
-Debe impedir ejecutar 20 llamadas a la IA porque una persona permanece 20 segundos en cámara.
-
----
-
-# 18. Cooldown
-
-Configurable.
-
-Ejemplo:
-
-```text
-EVENT_COOLDOWN_SECONDS=10
-```
-
-Evita eventos duplicados.
-
-No debe ser un número mágico escondido en código.
-
----
-
-# 19. FrameSelector
-
-Uno de los módulos más importantes para investigación.
-
-Entrada:
-
-```text
-30-150 frames
-```
-
-Salida:
-
-```text
-3 / 5 / 8 / N imágenes
-```
-
-Primera estrategia:
-
-muestreo temporal uniforme.
-
-Ejemplo:
-
-```text
-T-2
-T-1
-T
-T+1
-T+2
-```
-
-Posteriormente podrán añadirse estrategias:
-
-```text
-uniform
-motion_based
-confidence_based
-adaptive
-```
-
----
-
-# 20. ImageProcessor
-
-Responsabilidades:
-
-- resize;
-- JPEG;
-- calidad;
-- crop;
-- conversión Base64 cuando sea necesario;
-- creación opcional de contact sheet.
-
-Configuración:
-
-```text
-IMAGE_MAX_WIDTH=1280
-JPEG_QUALITY=70
-```
-
-Estos parámetros deben registrarse en cada experimento.
-
----
-
-# 21. VisionAI
-
-Responsabilidad exclusiva:
-
-```text
-imágenes + prompt → resultado estructurado
-```
-
-No debe:
-
-- reproducir audio;
-- decidir eventos;
-- leer webcam;
-- modificar frontend.
-
-Entrada:
-
-```text
-frames procesados
-```
-
-Salida:
-
-objeto `AIAnalysisResult`.
-
----
-
-# 22. Respuesta estructurada esperada
-
-Modelo lógico:
-
-```json
-{
-  "event_detected": true,
-  "confidence": 0.91,
-  "event_type": "possible_littering",
-  "object": "plastic bottle",
-  "description": "La persona parece dejar una botella en la ribera.",
-  "recommended_action": "warn",
-  "warning_message": "Por favor, recoja la botella y ayúdenos a mantener limpio el río."
-}
-```
-
-No confiar en texto libre como:
-
-```text
-Creo que posiblemente...
-```
-
-Validar siempre mediante esquema.
-
----
-
-# 23. Regla crítica del sistema
-
-La IA NO identifica personas.
-
-No utilizar:
-
-```text
-face recognition
-```
-
-No almacenar:
-
-```text
-nombre
-DNI
-identidad biométrica
-```
-
-El objetivo es detectar una conducta potencialmente contaminante.
-
----
-
-# 24. Niveles de decisión
-
-Definir en configuración.
-
-Ejemplo inicial:
-
-```text
-confidence < 0.50
-    → ignorar
-
-0.50 <= confidence < 0.80
-    → registrar evento ambiguo
-
-confidence >= 0.80
-    → permitir advertencia
-```
-
-Los valores NO deben considerarse definitivos.
-
-Se determinarán mediante experimentación.
-
----
-
-# 25. Prompt del sistema multimodal
-
-Guardar fuera del código.
-
-Archivo:
-
-```text
-prompts/environmental_event.txt
-```
-
-Objetivo:
-
-analizar secuencia cronológica.
-
-Debe pedir al modelo:
-
-1. observar cambios entre imágenes;
-2. determinar si una persona parece abandonar o arrojar un objeto;
-3. diferenciar:
-   - portar objeto;
-   - recoger objeto;
-   - colocar temporalmente;
-   - arrojar;
-   - abandonar;
-4. evitar acusaciones cuando exista ambigüedad;
-5. proporcionar nivel de confianza;
-6. generar advertencia breve y respetuosa.
-
-Nunca hardcodear un prompt gigantesco dentro de `vision_client.py`.
-
----
-
-# 26. SpeechService
-
-Entrada:
-
-```text
-warning_message
-```
-
-Salida:
-
-```text
-audio
-```
-
-La generación debe ejecutarse únicamente cuando `DecisionEngine` determine que corresponde advertir.
-
-No generar audio para todos los eventos.
-
----
-
-# 27. DecisionEngine
-
-Responsabilidad:
-
-combinar:
-
-```text
-resultado IA
-+
-reglas locales
-+
-cooldown
-+
-estado del sistema
-```
-
-Salida:
-
-```text
-IGNORE
-LOG_ONLY
-WARN
-```
-
-Posteriormente puede incluir:
-
-```text
-REQUEST_MORE_FRAMES
-```
-
-para inferencia progresiva.
-
-Pero NO implementar todavía la lógica adaptativa avanzada.
-
----
-
-# 28. SystemState
-
-Debe existir una fuente central de estado.
-
-Ejemplo:
-
-```json
-{
-  "running": true,
-  "camera_connected": true,
-  "fps": 24.7,
-  "persons_detected": 1,
-  "active_event": true,
-  "last_analysis_confidence": 0.91,
-  "last_warning": "...",
-  "ai_model": "...",
-  "frames_per_analysis": 5
-}
-```
-
-El frontend lee esto.
-
-El frontend NO ejecuta lógica de visión.
-
----
-
-# 29. FastAPI
-
-Endpoints iniciales.
-
-## GET /api/status
-
-Estado general.
-
-## GET /api/events
-
-Últimos eventos.
-
-## GET /api/events/{id}
-
-Detalle.
-
-## GET /api/config
-
-Configuración no sensible.
-
-## PATCH /api/config
-
-Modificar parámetros permitidos.
-
-Ejemplo:
-
-```text
-frames_per_analysis
-jpeg_quality
-confidence_threshold
-```
-
-## POST /api/system/start
-
-Iniciar procesamiento.
-
-## POST /api/system/stop
-
-Detener procesamiento.
-
-## POST /api/test/speech
-
-Probar TTS.
-
-## POST /api/test/analysis
-
-Enviar manualmente imágenes para probar IA.
-
----
-
-# 30. WebSocket
-
-Ruta:
-
-```text
-/ws
-```
-
-Utilizarla para mandar al frontend:
-
-```text
-camera_status
-person_detected
-event_started
-analysis_started
-analysis_finished
-warning_started
-metrics_updated
-```
-
-Esto evita hacer:
-
-```text
-fetch cada 100 ms
-```
-
----
-
-# 31. Frontend
-
-Tecnología inicial:
-
-```text
-HTML
-CSS
-JavaScript vanilla
-```
-
-NO React inicialmente.
-
-Razón:
-
-el dashboard es auxiliar y debe permanecer sencillo.
-
-Podrá migrarse posteriormente si realmente lo necesita.
-
----
-
-# 32. Dashboard inicial
-
-Debe mostrar:
-
-## Estado
-
-```text
-Sistema: ACTIVO
-Cámara: CONECTADA
-IA: DISPONIBLE
-```
-
-## Video
-
-Preview local.
-
-## Detección
-
-```text
-Personas detectadas
-FPS
-```
-
-## Evento actual
-
-```text
-Analizando...
-```
-
-## Último resultado
-
-```text
-Evento: posible arrojo
-Confianza: 91 %
-Objeto: botella
-```
-
-## Advertencia
-
-```text
-"Por favor..."
-```
-
-## Métricas
-
-```text
-latencia IA
-latencia total
-tamaño imágenes
-cantidad imágenes
-modelo
-```
-
----
-
-# 33. Modos de interfaz
-
-Preparar conceptualmente dos vistas.
-
-## Modo exposición
-
-Grande, visual, simple.
-
-## Modo técnico
-
-Muestra:
-
-- FPS;
-- resolución;
-- número de frames;
-- JPEG quality;
-- tiempo de selección;
-- tamaño del payload;
-- tiempo API;
-- tiempo TTS;
-- tiempo total;
-- modelo;
-- confidence.
-
-Inicialmente pueden estar en la misma página.
-
----
-
-# 34. Métricas
-
-Registrar por cada evento:
-
-```text
-event_id
-timestamp
-camera_id
-frames_captured
-frames_sent
-image_resolution
-jpeg_quality
-payload_bytes
-local_detection_confidence
-ai_confidence
-ai_model
-ai_latency_ms
-tts_latency_ms
-total_latency_ms
-decision
-```
-
-Estas métricas son fundamentales para el trabajo académico.
-
----
-
-# 35. Datos experimentales
-
-Separar eventos reales y simulados.
-
-Ejemplo:
-
-```text
-data/test_videos/
-├── positive/
-└── negative/
-```
-
-Positive:
-
-```text
-persona_deja_botella
-persona_tira_bolsa
-```
-
-Negative:
-
-```text
-persona_caminar_con_botella
-persona_recoge_botella
-persona_se_sienta
-persona_deja_mochila
-```
-
-Esto permitirá medir falsos positivos.
-
----
-
-# 36. Persistencia inicial
-
-NO usar Supabase todavía como dependencia obligatoria.
-
-Primera versión:
-
-```text
-JSON / SQLite
-```
-
-Preferiblemente:
-
-```text
-SQLite
-```
-
-Ventajas:
-
-- local;
-- portable;
-- sin Internet;
-- suficiente para pruebas.
-
-Crear interfaz:
-
-```text
-EventsRepository
-```
-
-Implementación inicial:
-
-```text
-SQLiteEventsRepository
-```
-
-Posteriormente:
-
-```text
-SupabaseEventsRepository
-```
-
-El resto del sistema no debe enterarse.
-
----
-
-# 37. Configuración
-
-Archivo:
-
-```text
-.env
-```
-
-Ejemplo:
-
-```text
-OPENAI_API_KEY=
+```env
+# Configuración del Modelo de Visión OpenAI
+OPENAI_API_KEY=sk-...
 OPENAI_VISION_MODEL=gpt-5.6-luna
+OPENAI_VISION_REASONING_EFFORT=none
+IMAGE_DETAIL=low
 
+# Configuración de Síntesis de Voz (TTS)
+OPENAI_TTS_MODEL=gpt-4o-mini-tts
+OPENAI_TTS_VOICE=onyx
+OPENAI_TTS_SPEED=1.1
+OPENAI_TTS_RESPONSE_FORMAT=pcm
+OPENAI_TTS_STREAM_BUFFER_MS=400
+
+# Parámetros de Cámara y Video
 CAMERA_SOURCE=0
+CAMERA_FPS=30
+CAMERA_WIDTH=1280
+CAMERA_HEIGHT=720
 
-YOLO_MODEL=
+# Detector Local YOLOv8
+YOLO_MODEL=yolov8n.pt
 YOLO_PERSON_CONFIDENCE=0.50
 
-BUFFER_SECONDS=5
-EVENT_CAPTURE_SECONDS=3
-EVENT_COOLDOWN_SECONDS=10
+# Buffer Temporal y Eventos
+BUFFER_SECONDS=6
+EVENT_CAPTURE_SECONDS=5.6
+SEQUENCE_FRAME_INTERVAL_SECONDS=0.8
+EVENT_COOLDOWN_SECONDS=20
 
-FRAMES_PER_ANALYSIS=5
-IMAGE_MAX_WIDTH=1280
+# Modo de Reconocimiento Manual (Pruebas de Campo)
+MANUAL_RECOGNITION_MODE=True
+MANUAL_CAPTURE_FRAMES=4
+MANUAL_CAPTURE_INTERVAL_SECONDS=1.5
+IMAGE_MAX_WIDTH=960
 JPEG_QUALITY=70
 
+# Umbral del Motor de Decisión
 AI_WARNING_THRESHOLD=0.80
-```
 
-Crear:
-
-```text
-.env.example
-```
-
-SIN secretos.
-
----
-
-# 38. Seguridad
-
-`.gitignore` debe contener:
-
-```text
-.env
-__pycache__/
-*.pyc
-.venv/
-data/events/*
-data/audio/*
-```
-
-No subir API keys.
-
-No mostrar secretos mediante `/api/config`.
-
----
-
-# 39. Flujo completo esperado
-
-```text
-1. iniciar servidor
-
-2. cargar configuración
-
-3. inicializar cámara
-
-4. inicializar detector YOLO
-
-5. iniciar FrameBuffer
-
-6. leer frames
-
-7. YOLO detecta persona
-
-8. EventManager crea Event
-
-9. recopilar contexto temporal
-
-10. FrameSelector selecciona N imágenes
-
-11. ImageProcessor:
-       resize
-       crop opcional
-       JPEG
-
-12. VisionAI llama API
-
-13. validar JSON
-
-14. DecisionEngine decide
-
-15. registrar evento
-
-16. si WARN:
-       generar voz
-       reproducir audio
-
-17. actualizar frontend
-
-18. continuar vigilancia
+# Servidor de Red
+APP_ENV=development
+DEBUG=True
+HOST=127.0.0.1
+PORT=8000
 ```
 
 ---
 
-# 40. Concurrencia
+## 8. Procedimiento de Ejecución y Pruebas de Campo
 
-No ejecutar todo en el thread principal.
-
-Como mínimo separar:
-
-```text
-camera loop
-AI analysis
-web server
+### 8.1. Puesta en Marcha Local
+Para iniciar el servidor y el dashboard:
+```powershell
+# Activar el entorno e iniciar el sistema
+py -3.11 run.py
 ```
+El servidor quedará disponible en `http://127.0.0.1:8000`.
 
-La captura de cámara NO puede congelarse mientras la API tarda varios segundos.
-
-Arquitectura implementada en el prototipo actual:
-
-```text
-Camera Worker ── actualiza FrameBuffer continuamente
-      │
-      └── Event Analysis Thread (máximo uno activo)
-
-FastAPI / WebSocket continúan de forma independiente
-```
-
-El evento se crea antes de iniciar el hilo de análisis. Durante `EVENT_CAPTURE_SECONDS`, el hilo espera mientras el Camera Worker sigue incorporando frames al buffer; así se obtiene contexto anterior y posterior sin congelar el stream. El acceso al buffer está protegido para lectura y escritura concurrentes.
-
-Para una etapa con múltiples cámaras o mayor volumen se podrá migrar a:
-
-```text
-threading
-queue.Queue
-```
-
-o:
-
-```text
-asyncio
-```
-
-pero no mezclar ambos indiscriminadamente.
-
-Estado actual y evolución prevista:
-
-- captura OpenCV en un hilo dedicado;
-- análisis en un segundo hilo con `MAX_CONCURRENT_ANALYSES=1`;
-- API FastAPI async;
-- cola thread-safe reservada para una fase de escalamiento.
+### 8.2. Flujo de Prueba en Modo Manual Controlado
+1. Acceder al dashboard en el navegador web.
+2. Comprobar que el video en vivo muestra la cámara activa y que YOLO dibuja las cajas y tracks correspondientes.
+3. Simular una acción frente a la cámara (ej. sostener una botella y colocarla en el suelo).
+4. Hacer clic en **"Iniciar reconocimiento"**: el sistema capturará automáticamente 4 fotogramas en un lapso de 6 segundos.
+5. Hacer clic en **"Enviar imágenes a IA"**: el sistema enviará la secuencia a OpenAI Vision, procesará el veredicto en segundo plano, mostrará el diagnóstico y emitirá la advertencia sonora si la decisión es `WARN`.
 
 ---
 
-# 41. Cola de eventos futura
+## 9. Calidad, Testing y Confiabilidad
 
-La versión actual no necesita una cola porque bloquea nuevos disparos mientras existe un evento activo. Cuando se incorporen varias cámaras o análisis simultáneos, se utilizará una cola.
+El sistema cuenta con una exhaustiva suite de pruebas automatizadas con **pytest**, cubriendo todos los subsistemas críticos:
+- **`test_tracker.py` y `test_track_history.py`:** Asociación frame-a-frame de identidades de ByteTrack y memoria cinemática.
+- **`test_zones.py` y `test_scene_state.py`:** Cálculo geométrico de polígonos y ocupación de zonas.
+- **`test_associations.py` y `test_worker_associations.py`:** Correlación espacio-temporal persona–objeto.
+- **`test_pose.py`:** Estimación de keypoints y posturas biomecánicas.
+- **`test_frame_buffer.py` y `test_frame_selector.py`:** Ingesta muestreada y algoritmos de selección uniforme.
+- **`test_ai_schema.py`:** Validación del contrato estructurado JSON de OpenAI.
+- **`test_audio_output.py`:** Pipeline de reproducción de audio.
+- **`test_runtime_config.py`:** Modificación en caliente de parámetros vía API.
 
-Ejemplo:
-
-```text
-EventQueue
-```
-
-La cola futura evitará ejecutar simultáneamente varios análisis cuando aparezcan múltiples personas o cámaras.
-
-Primera versión:
-
-```text
-MAX_CONCURRENT_ANALYSES=1
-```
-
-Posteriormente podrá aumentarse.
+**Resultado de la suite de pruebas:** **49 pruebas ejecutadas y aprobadas (100% PASS).**
 
 ---
 
-# 42. Manejo de errores
-
-El sistema debe continuar funcionando si:
-
-## falla OpenAI
-
-```text
-registrar error
-no reproducir advertencia incorrecta
-continuar detección local
-```
-
-## se desconecta cámara
-
-```text
-intentar reconexión
-actualizar dashboard
-```
-
-## falla TTS
-
-```text
-registrar
-continuar monitoreo
-```
-
-## respuesta IA inválida
-
-```text
-no actuar
-registrar raw response para debugging
-```
-
-Nunca realizar una advertencia cuando el análisis falla.
-
----
-
-# 43. Desarrollo por etapas
-
-## Fase 0
-
-Crear solamente estructura.
-
-Debe arrancar FastAPI.
-
-Dashboard básico.
-
----
-
-## Fase 1
-
-Webcam → OpenCV → preview.
-
----
-
-## Fase 2
-
-Webcam → YOLO → detectar persona.
-
----
-
-## Fase 3
-
-Implementar buffer + eventos.
-
----
-
-## Fase 4
-
-Seleccionar frames y guardarlos localmente.
-
-SIN API todavía.
-
----
-
-## Fase 5
-
-Enviar manualmente imágenes a IA.
-
----
-
-## Fase 6
-
-Integrar análisis automático.
-
----
-
-## Fase 7
-
-Integrar TTS.
-
----
-
-## Fase 8
-
-Integración completa.
-
----
-
-## Fase 9
-
-Benchmarks.
-
----
-
-# 44. Lo que NO debe implementar todavía el agente
-
-NO implementar:
-
-- Supabase;
-- autenticación;
-- reconocimiento facial;
-- Kotlin;
-- Android;
-- 4G adaptativo;
-- cámaras PTZ;
-- ONVIF;
-- fibra;
-- múltiples cámaras;
-- seguimiento automático mecánico;
-- modelos IA dinámicos;
-- routing Luna/Terra/Sol;
-- razonamiento adaptativo;
-- inferencia progresiva;
-- almacenamiento cloud;
-- entrenamiento YOLO personalizado.
-
-Solo dejar la arquitectura preparada para extensión.
-
----
-
-# 45. Principio fundamental
-
-El primer objetivo NO es detectar perfectamente basura.
-
-El primer objetivo es demostrar el pipeline:
-
-```text
-CÁMARA
-↓
-PERSONA DETECTADA
-↓
-EVENTO
-↓
-IMÁGENES
-↓
-IA
-↓
-JSON
-↓
-DECISIÓN
-↓
-VOZ
-```
-
-Cuando eso funcione de extremo a extremo, recién se optimiza.
-
----
-
-# 46. Diseño extensible
-
-El sistema debe permitir posteriormente cambiar:
-
-```text
-UsbCamera
-```
-
-por:
-
-```text
-RtspCamera
-```
-
-sin cambiar VisionAI.
-
-Cambiar:
-
-```text
-OpenAIVisionAI
-```
-
-por otro proveedor sin cambiar CameraSource.
-
-Cambiar:
-
-```text
-LocalSpeakerOutput
-```
-
-por altavoz IP sin cambiar DecisionEngine.
-
-Cambiar:
-
-```text
-SQLiteRepository
-```
-
-por Supabase sin cambiar EventManager.
-
----
-
-# 47. Contrato conceptual de Event
-
-```json
-{
-  "id": "uuid",
-  "camera_id": "CAM_001",
-  "started_at": "...",
-  "ended_at": "...",
-  "local_detection": {
-    "persons": 1,
-    "max_confidence": 0.93
-  },
-  "capture": {
-    "total_frames": 75,
-    "selected_frames": 5,
-    "jpeg_quality": 70
-  },
-  "analysis": null,
-  "decision": null,
-  "metrics": {}
-}
-```
-
----
-
-# 48. Contrato conceptual de Analysis
-
-```json
-{
-  "event_detected": true,
-  "confidence": 0.91,
-  "event_type": "possible_littering",
-  "object": "plastic_bottle",
-  "description": "Possible disposal of a plastic bottle.",
-  "recommended_action": "warn",
-  "warning_message": "Por favor, recoja la botella y ayúdenos a mantener limpio el río."
-}
-```
-
----
-
-# 49. Primera prueba end-to-end objetivo
-
-Escenario:
-
-```text
-una persona entra al encuadre
-↓
-YOLO detecta persona
-↓
-se crea Event
-↓
-se recuperan imágenes del buffer
-↓
-se seleccionan 5
-↓
-IA analiza
-↓
-devuelve JSON
-↓
-dashboard muestra resultado
-↓
-si corresponde:
-se genera voz
-↓
-parlante reproduce advertencia
-```
-
-Esta prueba define el primer milestone funcional.
-
----
-
-# 50. Instrucción específica para el agente
-
-Crear la estructura completa del proyecto descrita en este documento.
-
-En esta primera ejecución:
-
-1. crear carpetas;
-2. crear módulos;
-3. crear clases/interfaces base;
-4. crear modelos Pydantic;
-5. crear configuración;
-6. crear `.env.example`;
-7. crear `requirements.txt`;
-8. crear FastAPI básico;
-9. crear frontend básico;
-10. implementar endpoints mínimos de health/status;
-11. dejar placeholders explícitos para cámara, YOLO, IA y TTS;
-12. documentar cada módulo;
-13. garantizar que el proyecto arranque sin necesidad de cámara ni API key;
-14. NO implementar todavía la lógica completa de detección;
-15. NO inventar funcionalidades adicionales.
-
-El código debe privilegiar:
-
-- claridad;
-- modularidad;
-- tipado;
-- mantenibilidad;
-- facilidad para experimentar.
-
-Evitar abstracciones excesivas y patrones empresariales innecesarios.
-
-El sistema todavía es un prototipo de investigación.
+## 10. Hoja de Ruta y Próximos Pasos (Fases 5–8)
+
+1. **Optimización de Latencia para Despliegue en Faja Marginal:**
+   - Implementar síntesis de voz local con **Piper TTS** para reducir la latencia de audio a menos de 300 ms en caso de redes móviles lentas.
+   - Evaluación de modelos de visión locales compactos (ej. Qwen2-VL o SmolVLM) como respaldo offline.
+2. **Calibración Ambiental en Terreno:**
+   - Ajuste de umbrales para condiciones de baja visibilidad (crepúsculo/noche) y filtrado de movimiento de vegetación y reflejos en el caudal del río Huallaga.
+3. **Seguridad y Despliegue en Hardware de Borde:**
+   - Incorporación de autenticación por tokens en la API REST y WebSocket para despliegues en dispositivos embebidos (NVIDIA Jetson / Raspberry Pi 5 con acelerador NPU).

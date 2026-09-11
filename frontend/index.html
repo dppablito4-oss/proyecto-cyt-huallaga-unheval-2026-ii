@@ -3,19 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SIVARH</title>
+  <title>SIVARH — Monitoreo Ambiental Huallaga</title>
+  <link rel="icon" type="image/png" href="assets/isotipo_sivarh_trans.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
   <div class="app-layout">
     <header class="main-header">
-      <div>
-        <p class="eyebrow">UNHEVAL 2026</p>
-        <h1>SIVARH</h1>
-        <p class="subtitle">Vigilancia ambiental preventiva — sector Puente Huallaga, UNHEVAL</p>
+      <div class="brand-group">
+        <div class="brand-logo-badge" title="SIVARH — Sistema Inteligente de Vigilancia Ambiental">
+          <img src="assets/isotipo_sivarh_trans.png" alt="SIVARH Isotipo" class="brand-logo-img">
+        </div>
+        <div class="brand-text">
+          <div class="brand-meta">
+            <p class="eyebrow">UNHEVAL 2026 &bull; CyT</p>
+            <span class="badge-tag">Edge AI &bull; VLM</span>
+          </div>
+          <h1 class="brand-title">SIVARH</h1>
+          <p class="subtitle">Vigilancia ambiental preventiva — sector Puente Huallaga, UNHEVAL</p>
+        </div>
       </div>
       <div class="header-controls">
         <label class="camera-control" for="camera-source-select">Camara
@@ -44,7 +53,15 @@
           <div class="panel-heading"><h2>Camara en vivo</h2><span id="fps-badge" class="metric-chip">0.0 FPS</span></div>
           <div class="video-wrapper">
             <img id="live-stream" src="/api/cameras/stream" alt="Video en vivo de la camara">
-            <div id="video-placeholder" class="placeholder-box" style="display: none;">Camara en espera</div>
+            <div id="video-placeholder" class="placeholder-box" style="display: none;">
+              <div class="placeholder-inner">
+                <div class="placeholder-logo-glow">
+                  <img src="assets/imagotipo_sivarh_trans.png" alt="SIVARH" class="placeholder-logo">
+                </div>
+                <p class="placeholder-title">Cámara en espera de señal</p>
+                <span class="placeholder-sub">Presiona "Iniciar cámara" para comenzar el flujo de video</span>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -112,14 +129,27 @@
         <div class="terminal-container" id="live-logs-container" aria-label="Registros del sistema">
           <div class="log-line log-INFO"><span class="log-time">[--:--:--]</span><span class="log-text">Interfaz lista. Esperando actividad.</span></div>
         </div>
-        <div class="terminal-footer"><span id="log-count-text">0 registros</span><span id="cooldown-footer">Modo manual: listo para capturar</span></div>
+        <div class="terminal-footer">
+          <div class="terminal-brand-footer">
+            <img src="assets/isotipo_sivarh_trans.png" alt="SIVARH" class="terminal-logo-icon">
+            <span id="cooldown-footer">Modo manual: listo para capturar</span>
+          </div>
+          <span id="log-count-text">0 registros</span>
+        </div>
       </section>
     </main>
   </div>
   <div id="alert-confirmation-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="alert-modal-title" hidden>
     <section class="alert-modal">
-      <p class="eyebrow alert-eyebrow">Alerta preparada por Luna</p>
-      <h2 id="alert-modal-title">Residuos detectados</h2>
+      <div class="alert-modal-header">
+        <div class="alert-badge-icon">
+          <img src="assets/isotipo_sivarh_trans.png" alt="SIVARH" class="alert-icon-img">
+        </div>
+        <div>
+          <p class="eyebrow alert-eyebrow">Alerta Ambiental Confirmada</p>
+          <h2 id="alert-modal-title">Residuos detectados</h2>
+        </div>
+      </div>
       <p class="alert-modal-note">Revisa el mensaje antes de reproducirlo por el altavoz.</p>
       <blockquote id="alert-modal-message">Esperando el mensaje de advertencia.</blockquote>
       <p id="alert-modal-voice-summary" class="alert-voice-summary">Se usará la voz y velocidad seleccionadas.</p>

@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>SIVARH — Documentación Técnica y Arquitectura</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 20mm 16mm 20mm 16mm;
+            @top-right {
+                content: "SIVARH — UNHEVAL (2026)";
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                font-size: 8pt;
+                color: #64748b;
+            }
+            @bottom-right {
+                content: "Página " counter(page);
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                font-size: 8pt;
+                color: #64748b;
+            }
+            @bottom-left {
+                content: "Documento Técnico de Investigación CyT";
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                font-size: 8pt;
+                color: #64748b;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        body {
+            font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.55;
+            color: #1e293b;
+            background-color: #ffffff;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Portada */
+        .cover-page {
+            page-break-after: always;
+            min-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 40px 20px 20px 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        }
+
+        .cover-header {
+            text-align: center;
+            border-bottom: 3px solid #0284c7;
+            padding-bottom: 25px;
+        }
+
+        .institution {
+            font-size: 14pt;
+            font-weight: 700;
+            color: #0f172a;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin: 0;
+        }
+
+        .faculty {
+            font-size: 11pt;
+            color: #0369a1;
+            font-weight: 600;
+            margin-top: 6px;
+        }
+
+        .program {
+            font-size: 9.5pt;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        .cover-body {
+            text-align: center;
+            margin: 40px 0;
+        }
+
+        .cover-logo-wrapper {
+            width: 150px;
+            margin: 0 auto 18px;
+        }
+
+        .cover-logo-img {
+            width: 100%;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #e0f2fe;
+            color: #0369a1;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 9pt;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            border: 1px solid #bae6fd;
+        }
+
+        .project-acronym {
+            font-size: 34pt;
+            font-weight: 900;
+            color: #0f172a;
+            letter-spacing: 2px;
+            margin: 10px 0;
+            background: linear-gradient(90deg, #0284c7, #0f766e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .project-title {
+            font-size: 14pt;
+            font-weight: 700;
+            color: #334155;
+            max-width: 90%;
+            margin: 0 auto;
+            line-height: 1.4;
+        }
+
+        .project-subtitle {
+            font-size: 11pt;
+            color: #0d9488;
+            font-weight: 600;
+            margin-top: 15px;
+        }
+
+        .cover-footer {
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 9pt;
+            color: #475569;
+        }
+
+        .cover-footer-column {
+            flex: 1;
+        }
+
+        .cover-footer-right {
+            text-align: right;
+        }
+
+        /* Tipografía y secciones */
+        h1.chapter-title {
+            font-size: 18pt;
+            font-weight: 800;
+            color: #0f172a;
+            border-bottom: 2px solid #0284c7;
+            padding-bottom: 6px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            page-break-before: always;
+        }
+
+        /* Evitar salto de página en el primer h1 después de la portada */
+        .cover-page + h1.chapter-title {
+            page-break-before: avoid;
+        }
+
+        h2.section-title {
+            font-size: 13pt;
+            font-weight: 700;
+            color: #0369a1;
+            margin-top: 22px;
+            margin-bottom: 10px;
+            border-left: 4px solid #0284c7;
+            padding-left: 10px;
+            page-break-after: avoid;
+        }
+
+        h3.subsection-title {
+            font-size: 11pt;
+            font-weight: 600;
+            color: #334155;
+            margin-top: 16px;
+            margin-bottom: 8px;
+            page-break-after: avoid;
+        }
+
+        p {
+            margin: 0 0 10px 0;
+            text-align: justify;
+        }
+
+        .divider {
+            border: 0;
+            height: 1px;
+            background: #e2e8f0;
+            margin: 24px 0;
+        }
+
+        /* Listas */
+        .styled-list {
+            margin: 8px 0 14px 20px;
+            padding: 0;
+        }
+
+        li {
+            margin-bottom: 5px;
+        }
+
+        /* Tablas */
+        .table-container {
+            margin: 16px 0;
+            width: 100%;
+            overflow-x: auto;
+            page-break-inside: avoid;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8.5pt;
+            line-height: 1.4;
+        }
+
+        th {
+            background-color: #0f172a;
+            color: #ffffff;
+            font-weight: 600;
+            text-align: left;
+            padding: 7px 10px;
+            border: 1px solid #1e293b;
+        }
+
+        td {
+            padding: 6px 10px;
+            border: 1px solid #e2e8f0;
+            vertical-align: top;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* Bloques de código y pre */
+        pre.code-block {
+            background-color: #0f172a;
+            color: #f8fafc;
+            padding: 12px 14px;
+            border-radius: 6px;
+            font-family: "Consolas", "Courier New", monospace;
+            font-size: 8pt;
+            line-height: 1.4;
+            overflow-x: hidden;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 14px 0;
+            page-break-inside: avoid;
+            border: 1px solid #334155;
+        }
+
+        code {
+            font-family: "Consolas", "Courier New", monospace;
+            font-size: 8.5pt;
+            background-color: #f1f5f9;
+            color: #0369a1;
+            padding: 1px 4px;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+        }
+
+        pre code {
+            background: transparent;
+            color: inherit;
+            padding: 0;
+            border: 0;
+        }
+
+        .doc-link {
+            color: #0284c7;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- PORTADA FORMAL PARA IMPRESIÓN -->
+    <div class="cover-page">
+        <div class="cover-header">
+            <h1 class="institution">Universidad Nacional Hermilio Valdizán</h1>
+            <div class="faculty">Facultad de Ingeniería Industrial y de Sistemas</div>
+            <div class="program">Proyecto de Investigación Aplicada en Ciencia y Tecnología (CyT 2026-II)</div>
+        </div>
+
+        <div class="cover-body">
+            <div class="cover-logo-wrapper">
+                <img src="../assets/imagotipo_sivarh.png" alt="SIVARH" class="cover-logo-img">
+            </div>
+            <div class="badge">Documentación Técnica Oficial &bull; Versión 2.0</div>
+            <div class="project-title">
+                Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga orientado a la detección preventiva del arrojo directo de residuos sólidos
+            </div>
+            <div class="project-subtitle">
+                Sector Crítico: Puente Huallaga &mdash; UNHEVAL (Huánuco &ndash; Amarilis &ndash; Pillco Marca)
+            </div>
+        </div>
+
+        <div class="cover-footer">
+            <div class="cover-footer-column">
+                <strong>Área Temática:</strong> Visión Computacional, Inteligencia Artificial Multimodal e Intervención Preventiva Ambiental.<br>
+                <strong>Entorno:</strong> Edge Computing (Local) + Multimodal Cloud Reasoning (OpenAI Vision &amp; TTS).
+            </div>
+            <div class="cover-footer-column cover-footer-right">
+                <strong>Ubicación:</strong> Huánuco, Perú<br>
+                <strong>Fecha:</strong> Septiembre 2026<br>
+                <strong>Estado:</strong> Prototipo Autónomo Operativo (Fases 1 a 4 Completadas)
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTENIDO TÉCNICO -->
+    <h1 class="chapter-title">SIVARH: Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga</h1>
+<h2 class="section-title">Documentación Técnica Oficial y Arquitectura del Sistema (v2)</h2>
+
+<p><strong>Orientado a la detección preventiva del arrojo directo de residuos sólidos, sector Puente Huallaga – UNHEVAL</strong></p>
+<p><em>Proyecto de Investigación Aplicada en Ciencia y Tecnología (CyT) — Universidad Nacional Hermilio Valdizán (UNHEVAL), Huánuco, Perú (2026-II)</em></p>
+
+<hr class="divider"/>
+
+<h2 class="section-title">Resumen Ejecutivo</h2>
+
+<p><strong>SIVARH</strong> es un sistema inteligente de monitoreo y disuasión ambiental diseñado para operar en el borde (<em>Edge Computing</em>) en zonas críticas de las riberas del río Huallaga. Su objetivo fundamental es la <strong>intervención preventiva pre-impacto</strong>: detectar conductas de arrojo deliberado o negligente de residuos sólidos (<em>littering</em>) y emitir un estímulo auditivo disuasorio (<em>nudge</em> cognitivo) en tiempo real para provocar el desistimiento del infractor antes de que el desecho alcance el agua o la faja marginal.</p>
+
+<p>A diferencia de las cámaras de seguridad convencionales o los detectores pasivos, SIVARH integra una arquitectura híbrida de visión artificial local (YOLOv8 + ByteTrack + estimación de pose + zonificación poligonal) y razonamiento semántico multimodal en la nube (OpenAI Vision GPT-5.6 Luna / GPT-4o) con síntesis de voz en streaming ultra-rápido (OpenAI TTS).</p>
+
+<hr class="divider"/>
+
+<h2 class="section-title">1. Evolución del Sistema: De Detector Básico a Sistema Autónomo Espaciotemporal</h2>
+
+<p>Para comprender el diseño actual de SIVARH, es clave examinar la transición tecnológica experimentada por el proyecto:</p>
+
+<pre class="code-block "><code>┌─────────────────────────────────────────────────┐
+│              FASE 1: PROTOTIPO BÁSICO           │
+│  • Detección simple de personas (YOLOv1-like)   │
+│  • Disparo ciego de alertas por presencia        │
+│  • Alto índice de falsos positivos               │
+│  • Sin memoria temporal ni contexto espacial    │
+└────────────────────────┬────────────────────────┘
+                         │
+                         ▼ Evolución arquitectónica
+┌─────────────────────────────────────────────────┐
+│        FASE 2 ACTUAL: SISTEMA AUTÓNOMO SIVARH   │
+│  • Detección multiclase (personas + residuos)   │
+│  • Tracking persistente ByteTrack (IDs únicos)  │
+│  • Memoria cinemática y trayectorias (15s)      │
+│  • Zonificación poligonal (Ribera / Alerta)     │
+│  • Asociación persona-objeto espaciotemporal   │
+│  • Estimación de pose (análisis biomecánico)   │
+│  • Buffer circular en RAM y selección uniforme │
+│  • Razonamiento multimodal estructurado (VLM)   │
+│  • Decisión de 3 niveles y Nudge de voz (TTS)  │
+│  • Dashboard interactivo (Modo Manual y Auto)  │
+└─────────────────────────────────────────────────┘</code></pre>
+
+<h3 class="subsection-title">1.1. El Prototipo Inicial (Fase 1: Reactivo Básico)</h3>
+<p>En su concepción inicial, el sistema operaba bajo un modelo ingenuo y reactivo:</p>
+<ul class="styled-list"><li class="bullet-item"><strong>Mecanismo:</strong> Cada vez que el detector local identificaba a una persona dentro del campo visual de la cámara, disparaba un evento y generaba una llamada a la API o un mensaje de advertencia.</li>
+<li class="bullet-item"><strong>Limitaciones críticas encontradas:</strong></li>
+</ul><ol class="styled-list"><li class="numbered-item" value="1"><strong>Tasa inaceptable de falsos positivos:</strong> El mero tránsito de estudiantes, deportistas o peatones por el Malecón Walker Soberón o el Puente Huallaga detonaba alarmas continuas, aun cuando nadie arrojaba nada.</li>
+<li class="numbered-item" value="2"><strong>Ceguera de objeto:</strong> El sistema no distinguía si la persona portaba un residuo, una mochila de estudio o nada en absoluto.</li>
+<li class="numbered-item" value="3"><strong>Ausencia de memoria temporal:</strong> Cada fotograma se evaluaba de forma aislada, sin capacidad de rastrear trayectorias, persistencia ni separación de objetos.</li>
+<li class="numbered-item" value="4"><strong>Costos y saturación:</strong> Disparar análisis externos por cada persona detectada saturaba el ancho de banda y multiplicaba innecesariamente los costos de cómputo en la nube.</li>
+</ol>
+<h3 class="subsection-title">1.2. El Sistema Actual (Fase 2: Autónomo, Espaciotemporal y Multimodal)</h3>
+<p>Para superar estas fallas estructurales, SIVARH evolucionó hacia una solución autónoma multi-etapa:</p>
+<ol class="styled-list"><li class="numbered-item" value="1"><strong>Detección Multiclase Local:</strong> Detección simultánea de personas y clases representativas de residuos comunes (<code>bottle</code>, <code>cup</code>, <code>backpack</code>, <code>handbag</code>).</li>
+<li class="numbered-item" value="2"><strong>Seguimiento Multi-Objeto (ByteTrack):</strong> Asignación de identidades temporales anónimas y estables a través del tiempo, permitiendo conocer si una persona acaba de ingresar, permanece estática o se retira.</li>
+<li class="numbered-item" value="3"><strong>Memoria de Trayectoria (<code>TrackHistory</code>):</strong> Almacenamiento acotado (15 segundos) de las coordenadas de cada entidad con purga automática por TTL (Time-To-Live).</li>
+<li class="numbered-item" value="4"><strong>Zonificación Espacial Semántica (<code>ZoneManager</code>):</strong> Segmentación del encuadre en zonas poligonales configurables (ej. <em>Zona Ribera/Peligro</em>, <em>Zona Observación</em>, <em>Zona Segura/Vía Pública</em>). Solo las interacciones que ocurren en o hacia la faja marginal pueden progresar.</li>
+<li class="numbered-item" value="5"><strong>Motor de Asociación Persona–Objeto (<code>AssociationEngine</code>):</strong> Evaluación espaciotemporal de cercanía e interacción entre personas y objetos sospechosos.</li>
+<li class="numbered-item" value="6"><strong>Infraestructura de Pose Biomecánica (<code>pose.py</code>):</strong> Detección de puntos clave de brazos y muñecas para reconocer posturas preparatorias de lanzamiento o desprendimiento.</li>
+<li class="numbered-item" value="7"><strong>Buffer Circular Muestreado (5 fps / 5s):</strong> Conservación en memoria RAM de los instantes inmediatamente previos y posteriores al evento (máximo 25 fotogramas), optimizando drásticamente el consumo de RAM.</li>
+<li class="numbered-item" value="8"><strong>Selección Inteligente de Cuadros (<code>FrameSelector</code>):</strong> Selección cronológica de 4 a 7 cuadros clave representativos de la secuencia de acción (antes, durante y después).</li>
+<li class="numbered-item" value="9"><strong>Razonamiento Multimodal Estricto (OpenAI Vision GPT-5.6 / GPT-4o):</strong> Evaluación de la secuencia temporal completa bajo un contrato Pydantic tipado (<code>AIAnalysisResult</code>), distinguiendo explícitamente entre:</li>
+</ol><ul class="styled-list"><li class="bullet-item">Portar un objeto (permitido).</li>
+<li class="bullet-item">Manipular un objeto (observación).</li>
+<li class="bullet-item">Soltar, abandonar o arrojar un residuo (infracción confirmada).</li>
+</ul><ol class="styled-list"><li class="numbered-item" value="10"><strong>Motor de Decisión Gradual (<code>DecisionEngine</code>):</strong> Clasificación en tres categorías operativas: <code>IGNORE</code>, <code>LOG_ONLY</code> y <code>WARN</code>.</li>
+<li class="numbered-item" value="11"><strong>Disuasión Auditiva Contextual (<code>SpeechService</code> + <code>AudioOutput</code>):</strong> Emisión instantánea por altavoz de un <em>nudge</em> disuasorio generado con voz humana sintética de alta fidelidad.</li>
+<li class="numbered-item" value="12"><strong>Doble Modo Operativo en Dashboard:</strong></li>
+</ol><ul class="styled-list"><li class="bullet-item"><em>Modo Autónomo:</em> Monitoreo continuo desatendido con cooldown anti-saturación de 20 segundos.</li>
+<li class="bullet-item"><em>Modo Manual de Campo:</em> Herramienta controlada para calibración in situ, donde el operador dispara ráfagas de 4 capturas a intervalos fijos de 1.5s y valida la respuesta del modelo VLM.</li>
+</ul>
+<hr class="divider"/>
+
+<h2 class="section-title">2. Justificación Científica y Delimitación del Alcance</h2>
+
+<h3 class="subsection-title">2.1. Contexto Territorial: Cuenca Media del Río Huallaga</h3>
+<p>La zona de estudio comprende el corredor fluvial que divide los distritos metropolitanos de <strong>Huánuco, Amarilis y Pillco Marca</strong>, con epicentro en:</p>
+<ul class="styled-list"><li class="bullet-item"><strong>Puente Huallaga:</strong> Conector vial masivo interdistrital.</li>
+<li class="bullet-item"><strong>Malecón Walker Soberón y Malecón Huallaga:</strong> Vías peatonales y vehiculares ribereñas.</li>
+<li class="bullet-item"><strong>Acceso a la Ciudad Universitaria UNHEVAL (Cayhuayna):</strong> Flujo diario de miles de estudiantes y transeúntes.</li>
+</ul>
+<p>Los reportes del Organismo de Evaluación y Fiscalización Ambiental (OEFA) y la Fiscalía Especializada en Materia Ambiental (FEMA) identifican más de <strong>216 puntos críticos</strong> de acumulación de basura en la cuenca del Huallaga en Huánuco, con una generación diaria de <strong>100 a 120 toneladas de residuos</strong>.</p>
+
+<h3 class="subsection-title">2.2. Delimitación Estricta de Fuentes de Contaminación</h3>
+<p>Para mantener la viabilidad técnica y científica, SIVARH define con rigor su frontera de intervención:</p>
+
+<div class="table-container"><table>
+<thead><tr>
+<th>Fuente Contaminante</th>
+<th>Mecanismo</th>
+<th>Alcance en SIVARH</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>1. Disposición directa por personas (<em>Littering</em>)</strong></td>
+<td>Arrojo manual e intencional de botellas PET, bolsas plásticas y empaques en la ribera.</td>
+<td><strong>ENFOQUE EXCLUSIVO</strong></td>
+</tr>
+<tr>
+<td><strong>2. Basura arrastrada por la corriente</strong></td>
+<td>Residuos flotantes transportados desde cuencas altas en época de crecida.</td>
+<td>Fuera de alcance (requiere dragado/mallas)</td>
+</tr>
+<tr>
+<td><strong>3. Efluentes de aguas residuales</strong></td>
+<td>Descargas cloacales domiciliarias e industriales (ej. Camal).</td>
+<td>Fuera de alcance (requiere PTAR)</td>
+</tr>
+<tr>
+<td><strong>4. Escombros clandestinos con volquetes</strong></td>
+<td>Descarga pesada nocturna en fajas marginales.</td>
+<td>Fuera de alcance inicial (requiere fiscalización policial)</td>
+</tr>
+<tr>
+<td><strong>5. Lixiviados y agroquímicos</strong></td>
+<td>Filtraciones de botaderos (Chilepampa) y pesticidas agrícolas.</td>
+<td>Fuera de alcance algorítmico</td>
+</tr>
+</tbody></table></div>
+
+<h3 class="subsection-title">2.3. Fundamento Psico-Conductual: Los *Nudges* Cognitivos</h3>
+<p>Las campañas de limpieza comunitaria periódicas son valiosas pero de efecto efímero: a los pocos días el punto crítico vuelve a regenerarse por la reincidencia conductual.</p>
+
+<p>SIVARH se fundamenta en la <strong>Teoría del Pensamiento Dual (Daniel Kahneman)</strong>:</p>
+<ul class="styled-list"><li class="bullet-item">El acto de arrojar un residuo suele ejecutarse mediante el <strong>Sistema 1 (automático, impulsivo, inconsciente)</strong> al aprovechar la dilución del anonimato.</li>
+<li class="bullet-item">La advertencia auditiva inmediata y personalizada en el instante previo a soltar el objeto actúa como un <strong>estímulo disuasorio (<em>nudge</em>)</strong> que despierta el <strong>Sistema 2 (reflexivo y consciente)</strong>.</li>
+<li class="bullet-item">El infractor se percata de que ha sido detectado (<em>shame effect</em>), perdiendo la sensación de impunidad y desistiendo de completar la infracción.</li>
+</ul>
+<hr class="divider"/>
+
+<h2 class="section-title">3. Arquitectura del Sistema Tecnológico</h2>
+
+<p>SIVARH está construido bajo el principio de <strong>separación estricta de responsabilidades</strong> y <strong>concurrencia sin bloqueo</strong>:</p>
+
+<pre class="code-block "><code>                       CÁMARA (USB / RTSP / Video MP4)
+                                     │
+                                     ▼
+                        CameraSource (OpenCV DSHOW)
+                                     │
+                             Flujo continuo (30 FPS)
+                                     │
+                ┌────────────────────┴────────────────────┐
+                ▼                                         ▼
+        VideoPipelineWorker                      FrameBuffer Circular
+    (Hilo secundario desacoplado)              (5 muestras/seg durante 5s)
+                │                                         │
+        ┌───────┴───────────────────────┐                 │
+        ▼                               ▼                 │
+    YOLOv8 Local                 ByteTrack Tracker        │
+(Personas y Objetos)          (IDs únicos temporales)     │
+        │                               │                 │
+        └───────────────┬───────────────┘                 │
+                        ▼                                 │
+                   SceneState                             │
+        (Zonas poligonales + Ocupación)                   │
+                        │                                 │
+                        ▼                                 │
+                AssociationEngine                         │
+          (Relación Persona - Objeto)                     │
+                        │                                 │
+                        ▼                                 │
+             ¿Condición de Evento? ───────────────────────┤
+                        │ (Sí: Modo Auto o Manual)        │
+                        ▼                                 ▼
+                  FrameSelector &lt;─────────────────────────┘
+             (3, 4, 5 u 8 cuadros clave)
+                        │
+                        ▼
+                 ImageProcessor
+           (Resize 960w + JPEG 70 + B64)
+                        │
+                        ▼
+              OpenAI Vision Client
+          (GPT-5.6 Luna / Structured Output)
+                        │
+                        ▼
+                 DecisionEngine
+         (Clasificación: IGNORE / LOG / WARN)
+                        │
+                        ├── WARN ─────────────────────────┐
+                        ▼                                 ▼
+                  SpeechService                      AudioOutput
+              (OpenAI TTS en streaming)            (Altavoz Local)
+                        │
+                        ▼
+                 Database (SQLite)
+             (Registro de auditoría)
+                        │
+                        ▼
+             WebSocket -&gt; Dashboard Web</code></pre>
+
+<h3 class="subsection-title">3.1. Hilos y Concurrencia</h3>
+<ul class="styled-list"><li class="bullet-item"><strong>Hilo ASGI / FastAPI:</strong> Atiende peticiones HTTP REST y difunde actualizaciones por WebSockets sin demoras.</li>
+<li class="bullet-item"><strong>Hilo de Cámara (<code>VideoPipelineWorker</code>):</strong> Captura fotogramas a tasa completa de la cámara, corre inferencias locales rápidas de detección y actualiza el estado global (<code>SystemState</code>).</li>
+<li class="bullet-item"><strong>Hilo de Análisis IA Asíncrono:</strong> Cuando se dispara un evento, la preparación de fotogramas, la llamada remota a la API de OpenAI y la síntesis de audio se procesan sin detener la captura de video en vivo ni la interfaz.</li>
+</ul>
+<hr class="divider"/>
+
+<h2 class="section-title">4. Módulos del Sistema y Responsabilidades</h2>
+
+<div class="table-container"><table>
+<thead><tr>
+<th>Módulo</th>
+<th>Ruta de Código</th>
+<th>Responsabilidad Técnica</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Servidor Principal</strong></td>
+<td>[<code>app/main.py</code>](app/main.py)</td>
+<td>Inicialización FastAPI, montaje de estáticos, rutas API y ciclo de vida de la aplicación.</td>
+</tr>
+<tr>
+<td><strong>Configuración</strong></td>
+<td>[<code>app/config.py</code>](app/config.py)</td>
+<td>Centralización tipada mediante Pydantic Settings de variables de entorno (<code>.env</code>).</td>
+</tr>
+<tr>
+<td><strong>Estado Global</strong></td>
+<td>[<code>app/state.py</code>](app/state.py)</td>
+<td>Instancia singleton reactiva <code>system_state</code> con observadores y notificaciones WebSocket.</td>
+</tr>
+<tr>
+<td><strong>Abstracción de Video</strong></td>
+<td>[<code>app/camera/</code>](app/camera/)</td>
+<td>Control de cámaras USB (<code>usb_camera.py</code>), streams IP (<code>rtsp_camera.py</code>) y archivos de prueba (<code>video_file.py</code>).</td>
+</tr>
+<tr>
+<td><strong>Worker del Pipeline</strong></td>
+<td>[<code>app/camera/worker.py</code>](app/camera/worker.py)</td>
+<td>Bucle principal de adquisición, despacho de frames al buffer, llamada a YOLO y control de modo manual.</td>
+</tr>
+<tr>
+<td><strong>Detector Local</strong></td>
+<td>[<code>app/vision/detector.py</code>](app/vision/detector.py)</td>
+<td>Inferencia con Ultralytics YOLOv8 para <code>person</code>, <code>bottle</code>, <code>cup</code>, <code>backpack</code>, <code>handbag</code>.</td>
+</tr>
+<tr>
+<td><strong>Rastreo (Tracker)</strong></td>
+<td>[<code>app/vision/tracker.py</code>](app/vision/tracker.py)</td>
+<td>Adaptador de ByteTrack para asociación frame-a-frame de identidades temporales continuas.</td>
+</tr>
+<tr>
+<td><strong>Zonificación</strong></td>
+<td>[<code>app/vision/zones.py</code>](app/vision/zones.py)</td>
+<td>Gestor de polígonos normalizados, comprobación punto-en-polígono y cálculo de ocupación por zona.</td>
+</tr>
+<tr>
+<td><strong>Historial Cinemático</strong></td>
+<td>[<code>app/vision/track_history.py</code>](app/vision/track_history.py)</td>
+<td>Registro de posiciones pasadas, cálculo de velocidad y purga automática por TTL.</td>
+</tr>
+<tr>
+<td><strong>Asociación</strong></td>
+<td>[<code>app/vision/associations.py</code>](app/vision/associations.py)</td>
+<td>Detección de proximidad, solapamiento y correlación espacial entre personas y residuos.</td>
+</tr>
+<tr>
+<td><strong>Pose Biomecánica</strong></td>
+<td>[<code>app/vision/pose.py</code>](app/vision/pose.py)</td>
+<td>Esqueleto corporal para análisis de ángulos de hombros, codos y muñecas en ademanes de tiro.</td>
+</tr>
+<tr>
+<td><strong>Buffer de Fotogramas</strong></td>
+<td>[<code>app/vision/frame_buffer.py</code>](app/vision/frame_buffer.py)</td>
+<td>Cola doble (<code>collections.deque</code>) muestreada en memoria RAM (5 fps, 5 segundos).</td>
+</tr>
+<tr>
+<td><strong>Selector de Cuadros</strong></td>
+<td>[<code>app/vision/frame_selector.py</code>](app/vision/frame_selector.py)</td>
+<td>Algoritmo de sub-muestreo temporal uniforme para extraer secuencias compactas.</td>
+</tr>
+<tr>
+<td><strong>Compresión</strong></td>
+<td>[<code>app/vision/image_processor.py</code>](app/vision/image_processor.py)</td>
+<td>Reescalado a resolución óptima, compresión JPEG al 70% y serialización Base64.</td>
+</tr>
+<tr>
+<td><strong>Cliente VLM</strong></td>
+<td>[<code>app/ai/vision_client.py</code>](app/ai/vision_client.py)</td>
+<td>Envío de secuencias a OpenAI Vision (GPT-5.6 Luna) y parseo estricto del esquema JSON.</td>
+</tr>
+<tr>
+<td><strong>Motor de Decisión</strong></td>
+<td>[<code>app/events/decision_engine.py</code>](app/events/decision_engine.py)</td>
+<td>Reglas de negocio para clasificar en <code>IGNORE</code>, <code>LOG_ONLY</code> o <code>WARN</code> según umbrales de confianza.</td>
+</tr>
+<tr>
+<td><strong>Síntesis de Voz</strong></td>
+<td>[<code>app/speech/tts_service.py</code>](app/speech/tts_service.py)</td>
+<td>Generación de audio mediante OpenAI TTS con soporte de streaming PCM de baja latencia.</td>
+</tr>
+<tr>
+<td><strong>Reproducción Local</strong></td>
+<td>[<code>app/speech/audio_output.py</code>](app/speech/audio_output.py)</td>
+<td>Emisión física del audio a través de los altavoces de la estación de borde.</td>
+</tr>
+<tr>
+<td><strong>Almacenamiento</strong></td>
+<td>[<code>app/storage/database.py</code>](app/storage/database.py)</td>
+<td>Base de datos SQLite para auditoría forense de eventos, imágenes clave y decisiones.</td>
+</tr>
+<tr>
+<td><strong>Dashboard Frontend</strong></td>
+<td>[<code>frontend/</code>](frontend/)</td>
+<td>Interfaz gráfica web moderna con streaming en vivo, métricas, controles y visualizador de secuencias.</td>
+</tr>
+</tbody></table></div>
+
+<hr class="divider"/>
+
+<h2 class="section-title">5. Modelos de Datos y Contratos Formales (Pydantic)</h2>
+
+<h3 class="subsection-title">5.1. Contrato del Análisis Multimodal (`AIAnalysisResult`)</h3>
+<p>El modelo de visión artificial responde obligatoriamente bajo este esquema validado:</p>
+
+<pre class="code-block python"><code>class AIAnalysisResult(BaseModel):
+    person_detected: bool          # ¿Hay al menos una persona visible en la secuencia?
+    suspected_disposal: bool       # ¿Hay un ademán o acción sospechosa de arrojo?
+    action_completed: bool         # ¿El residuo quedó efectivamente desprendido/abandonado?
+    confidence: float              # Grado de certeza de la inferencia (0.00 a 1.00)
+    diagnosis: str                 # Diagnóstico técnico en 1 o 2 oraciones
+    suggested_warning: str | None  # Frase disuasoria recomendada para el infractor
+    reasoning: str | None          # Justificación paso a paso de la conclusión visual</code></pre>
+
+<h3 class="subsection-title">5.2. Reglas del Motor de Decisión (`DecisionEngine`)</h3>
+<p>La transición del resultado a una acción física sigue una lógica rigurosa:</p>
+<ul class="styled-list"><li class="bullet-item"><strong><code>IGNORE</code>:</strong> Si <code>suspected_disposal == False</code> o la confianza no alcanza el umbral mínimo (0.40). No se emite audio ni se alerta.</li>
+<li class="bullet-item"><strong><code>LOG_ONLY</code>:</strong> Si hay sospecha pero <code>action_completed == False</code> o la confianza es intermedia (0.40 ≤ conf < 0.80). Se guarda registro fotográfico y forense en SQLite para análisis, pero no se emite audio para evitar falsos positivos hacia el transeúnte.</li>
+<li class="bullet-item"><strong><code>WARN</code>:</strong> Si <code>action_completed == True</code> y <code>confidence >= 0.80</code> (umbral configurable en <code>.env</code>). Se activa de inmediato el <code>SpeechService</code> para reproducir la advertencia y se marca el evento como alerta activa en el dashboard.</li>
+</ul>
+<hr class="divider"/>
+
+<h2 class="section-title">6. Endpoints de la API REST y WebSockets</h2>
+
+<h3 class="subsection-title">6.1. Endpoints de Control y Estado</h3>
+<div class="table-container"><table>
+<thead><tr>
+<th>Método</th>
+<th>Ruta</th>
+<th>Descripción</th>
+</tr></thead><tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/status</code></td>
+<td>Retorna el estado global del sistema: cámara, tracks, FPS, métricas y logs recientes.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/system/start</code></td>
+<td>Inicia la cámara y el worker de procesamiento de video.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/system/stop</code></td>
+<td>Detiene la cámara y el worker de video.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/events</code></td>
+<td>Lista los eventos históricos almacenados en la base de datos SQLite.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/events/{id}</code></td>
+<td>Retorna el detalle completo de un evento específico, incluyendo fotogramas clave.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/config</code></td>
+<td>Obtiene la configuración actual del sistema en tiempo de ejecución.</td>
+</tr>
+<tr>
+<td><code>PATCH</code></td>
+<td><code>/api/config</code></td>
+<td>Modifica dinámicamente parámetros de configuración en caliente.</td>
+</tr>
+</tbody></table></div>
+
+<h3 class="subsection-title">6.2. Endpoints para Modo Manual y Depuración</h3>
+<div class="table-container"><table>
+<thead><tr>
+<th>Método</th>
+<th>Ruta</th>
+<th>Descripción</th>
+</tr></thead><tbody>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/system/manual/start-recognition</code></td>
+<td>Inicia la ráfaga de 4 capturas automáticas espaciadas por 1.5s.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/system/manual/send-images</code></td>
+<td>Envía la secuencia capturada a OpenAI Vision para su análisis y decisión.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/debug/test-speech</code></td>
+<td>Prueba la síntesis de voz OpenAI TTS y la reproducción por el altavoz.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/debug/test-vision</code></td>
+<td>Prueba el cliente multimodal con una imagen estática de prueba.</td>
+</tr>
+</tbody></table></div>
+
+<h3 class="subsection-title">6.3. Comunicación en Tiempo Real</h3>
+<ul class="styled-list"><li class="bullet-item"><strong>WebSocket <code>/ws/status</code>:</strong> Envía pulsos de telemetría continuos (JSON) al frontend con: FPS real, número de personas y objetos detectados, ocupación por zona, tracks activos, estado de la IA y logs del sistema.</li>
+<li class="bullet-item"><strong>Streaming de Video <code>/video_feed</code>:</strong> Transmisión MJPEG en vivo con bounding boxes, zonas y overlays de depuración opcionales.</li>
+</ul>
+<hr class="divider"/>
+
+<h2 class="section-title">7. Configuración del Sistema (.env)</h2>
+
+<p>Los parámetros principales que gobiernan el comportamiento operativo de SIVARH se configuran en el archivo <code>.env</code>:</p>
+
+<pre class="code-block env"><code># Configuración del Modelo de Visión OpenAI
+OPENAI_API_KEY=sk-...
+OPENAI_VISION_MODEL=gpt-5.6-luna
+OPENAI_VISION_REASONING_EFFORT=none
+IMAGE_DETAIL=low
+
+# Configuración de Síntesis de Voz (TTS)
+OPENAI_TTS_MODEL=gpt-4o-mini-tts
+OPENAI_TTS_VOICE=onyx
+OPENAI_TTS_SPEED=1.1
+OPENAI_TTS_RESPONSE_FORMAT=pcm
+OPENAI_TTS_STREAM_BUFFER_MS=400
+
+# Parámetros de Cámara y Video
+CAMERA_SOURCE=0
+CAMERA_FPS=30
+CAMERA_WIDTH=1280
+CAMERA_HEIGHT=720
+
+# Detector Local YOLOv8
+YOLO_MODEL=yolov8n.pt
+YOLO_PERSON_CONFIDENCE=0.50
+
+# Buffer Temporal y Eventos
+BUFFER_SECONDS=6
+EVENT_CAPTURE_SECONDS=5.6
+SEQUENCE_FRAME_INTERVAL_SECONDS=0.8
+EVENT_COOLDOWN_SECONDS=20
+
+# Modo de Reconocimiento Manual (Pruebas de Campo)
+MANUAL_RECOGNITION_MODE=True
+MANUAL_CAPTURE_FRAMES=4
+MANUAL_CAPTURE_INTERVAL_SECONDS=1.5
+IMAGE_MAX_WIDTH=960
+JPEG_QUALITY=70
+
+# Umbral del Motor de Decisión
+AI_WARNING_THRESHOLD=0.80
+
+# Servidor de Red
+APP_ENV=development
+DEBUG=True
+HOST=127.0.0.1
+PORT=8000</code></pre>
+
+<hr class="divider"/>
+
+<h2 class="section-title">8. Procedimiento de Ejecución y Pruebas de Campo</h2>
+
+<h3 class="subsection-title">8.1. Puesta en Marcha Local</h3>
+<p>Para iniciar el servidor y el dashboard:</p>
+<pre class="code-block powershell"><code># Activar el entorno e iniciar el sistema
+py -3.11 run.py</code></pre>
+<p>El servidor quedará disponible en <code>http://127.0.0.1:8000</code>.</p>
+
+<h3 class="subsection-title">8.2. Flujo de Prueba en Modo Manual Controlado</h3>
+<ol class="styled-list"><li class="numbered-item" value="1">Acceder al dashboard en el navegador web.</li>
+<li class="numbered-item" value="2">Comprobar que el video en vivo muestra la cámara activa y que YOLO dibuja las cajas y tracks correspondientes.</li>
+<li class="numbered-item" value="3">Simular una acción frente a la cámara (ej. sostener una botella y colocarla en el suelo).</li>
+<li class="numbered-item" value="4">Hacer clic en <strong>"Iniciar reconocimiento"</strong>: el sistema capturará automáticamente 4 fotogramas en un lapso de 6 segundos.</li>
+<li class="numbered-item" value="5">Hacer clic en <strong>"Enviar imágenes a IA"</strong>: el sistema enviará la secuencia a OpenAI Vision, procesará el veredicto en segundo plano, mostrará el diagnóstico y emitirá la advertencia sonora si la decisión es <code>WARN</code>.</li>
+</ol>
+<hr class="divider"/>
+
+<h2 class="section-title">9. Calidad, Testing y Confiabilidad</h2>
+
+<p>El sistema cuenta con una exhaustiva suite de pruebas automatizadas con <strong>pytest</strong>, cubriendo todos los subsistemas críticos:</p>
+<ul class="styled-list"><li class="bullet-item"><strong><code>test_tracker.py</code> y <code>test_track_history.py</code>:</strong> Asociación frame-a-frame de identidades de ByteTrack y memoria cinemática.</li>
+<li class="bullet-item"><strong><code>test_zones.py</code> y <code>test_scene_state.py</code>:</strong> Cálculo geométrico de polígonos y ocupación de zonas.</li>
+<li class="bullet-item"><strong><code>test_associations.py</code> y <code>test_worker_associations.py</code>:</strong> Correlación espacio-temporal persona–objeto.</li>
+<li class="bullet-item"><strong><code>test_pose.py</code>:</strong> Estimación de keypoints y posturas biomecánicas.</li>
+<li class="bullet-item"><strong><code>test_frame_buffer.py</code> y <code>test_frame_selector.py</code>:</strong> Ingesta muestreada y algoritmos de selección uniforme.</li>
+<li class="bullet-item"><strong><code>test_ai_schema.py</code>:</strong> Validación del contrato estructurado JSON de OpenAI.</li>
+<li class="bullet-item"><strong><code>test_audio_output.py</code>:</strong> Pipeline de reproducción de audio.</li>
+<li class="bullet-item"><strong><code>test_runtime_config.py</code>:</strong> Modificación en caliente de parámetros vía API.</li>
+</ul>
+<p><strong>Resultado de la suite de pruebas:</strong> <strong>49 pruebas ejecutadas y aprobadas (100% PASS).</strong></p>
+
+<hr class="divider"/>
+
+<h2 class="section-title">10. Hoja de Ruta y Próximos Pasos (Fases 5–8)</h2>
+
+<ol class="styled-list"><li class="numbered-item" value="1"><strong>Optimización de Latencia para Despliegue en Faja Marginal:</strong></li>
+</ol><ul class="styled-list"><li class="bullet-item">Implementar síntesis de voz local con <strong>Piper TTS</strong> para reducir la latencia de audio a menos de 300 ms en caso de redes móviles lentas.</li>
+<li class="bullet-item">Evaluación de modelos de visión locales compactos (ej. Qwen2-VL o SmolVLM) como respaldo offline.</li>
+</ul><ol class="styled-list"><li class="numbered-item" value="2"><strong>Calibración Ambiental en Terreno:</strong></li>
+</ol><ul class="styled-list"><li class="bullet-item">Ajuste de umbrales para condiciones de baja visibilidad (crepúsculo/noche) y filtrado de movimiento de vegetación y reflejos en el caudal del río Huallaga.</li>
+</ul><ol class="styled-list"><li class="numbered-item" value="3"><strong>Seguridad y Despliegue en Hardware de Borde:</strong></li>
+</ol><ul class="styled-list"><li class="bullet-item">Incorporación de autenticación por tokens en la API REST y WebSocket para despliegues en dispositivos embebidos (NVIDIA Jetson / Raspberry Pi 5 con acelerador NPU).</li></ul>
+
+</body>
+</html>
