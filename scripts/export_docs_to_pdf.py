@@ -204,40 +204,66 @@ def build_full_html():
         }}
 
         .cover-header {{
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
             border-bottom: 3px solid #0284c7;
-            padding-bottom: 25px;
+            padding-bottom: 20px;
+        }}
+
+        .cover-header-logo {{
+            width: 75px;
+            height: 75px;
+            flex: 0 0 75px;
+            object-fit: contain;
+        }}
+
+        .cover-header-text {{
+            flex: 1;
+            text-align: center;
         }}
 
         .institution {{
-            font-size: 14pt;
-            font-weight: 700;
+            font-size: 13pt;
+            font-weight: 800;
             color: #0f172a;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
+            letter-spacing: 1.2px;
             margin: 0;
         }}
 
         .faculty {{
             font-size: 11pt;
             color: #0369a1;
-            font-weight: 600;
-            margin-top: 6px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-top: 4px;
         }}
 
-        .program {{
+        .school {{
+            font-size: 10pt;
+            color: #0f766e;
+            font-weight: 600;
+            margin-top: 3px;
+        }}
+
+        .course {{
             font-size: 9.5pt;
-            color: #64748b;
-            margin-top: 4px;
+            color: #475569;
+            font-weight: 600;
+            margin-top: 3px;
+            font-style: italic;
         }}
 
         .cover-body {{
             text-align: center;
-            margin: 40px 0;
+            margin: 35px 0;
         }}
 
         .cover-logo-wrapper {{
-            width: 150px;
+            width: 170px;
             margin: 0 auto 18px;
         }}
 
@@ -443,16 +469,21 @@ def build_full_html():
     <!-- PORTADA FORMAL PARA IMPRESIÓN -->
     <div class="cover-page">
         <div class="cover-header">
-            <h1 class="institution">Universidad Nacional Hermilio Valdizán</h1>
-            <div class="faculty">Facultad de Ingeniería Industrial y de Sistemas</div>
-            <div class="program">Proyecto de Investigación Aplicada en Ciencia y Tecnología (CyT 2026-II)</div>
+            <img src="../assets/logo_unheval.png" alt="UNHEVAL" class="cover-header-logo">
+            <div class="cover-header-text">
+                <h1 class="institution">Universidad Nacional Hermilio Valdizán</h1>
+                <div class="faculty">Facultad de Ciencias de la Educación</div>
+                <div class="school">Escuela Profesional de Matemática y Física</div>
+                <div class="course">Asignatura: Ciencias Naturales y del Ambiente</div>
+            </div>
+            <img src="../assets/logo_myf.png" alt="Matemática y Física" class="cover-header-logo">
         </div>
 
         <div class="cover-body">
             <div class="cover-logo-wrapper">
                 <img src="../assets/imagotipo_sivarh.png" alt="SIVARH" class="cover-logo-img">
             </div>
-            <div class="badge">Documentación Técnica Oficial &bull; Versión 2.0</div>
+            <div class="badge">Proyecto de Investigación Aplicada &bull; CyT 2026-II</div>
             <div class="project-title">
                 Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga orientado a la detección preventiva del arrojo directo de residuos sólidos
             </div>
@@ -463,13 +494,14 @@ def build_full_html():
 
         <div class="cover-footer">
             <div class="cover-footer-column">
-                <strong>Área Temática:</strong> Visión Computacional, Inteligencia Artificial Multimodal e Intervención Preventiva Ambiental.<br>
-                <strong>Entorno:</strong> Edge Computing (Local) + Multimodal Cloud Reasoning (OpenAI Vision &amp; TTS).
+                <strong>Área Académica:</strong> Ciencias Naturales y del Ambiente &bull; Matemática y Física.<br>
+                <strong>Línea:</strong> Inteligencia Artificial Aplicada a la Preservación Ecológica Fluvial.<br>
+                <strong>Arquitectura:</strong> Edge Computing (Local) + Multimodal Cloud Reasoning.
             </div>
             <div class="cover-footer-column cover-footer-right">
                 <strong>Ubicación:</strong> Huánuco, Perú<br>
-                <strong>Fecha:</strong> Septiembre 2026<br>
-                <strong>Estado:</strong> Prototipo Autónomo Operativo (Fases 1 a 4 Completadas)
+                <strong>Periodo Académico:</strong> 2026-II<br>
+                <strong>Estado:</strong> Prototipo Autónomo Operativo (Fases 1 a 4)
             </div>
         </div>
     </div>

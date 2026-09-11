@@ -1,7 +1,13 @@
 """
 Script lanzador principal de SIVARH
 ==================================================
-Ejecuta el servidor backend FastAPI y sirve el dashboard web.
+Proyecto de Investigación Aplicada en Ciencia y Tecnología (CyT 2026-II)
+Universidad Nacional Hermilio Valdizán (UNHEVAL)
+Facultad de Ciencias de la Educación
+Carrera Profesional de Matemática y Física
+Asignatura: Ciencias Naturales y del Ambiente
+
+Ejecuta el servidor backend FastAPI y sirve el dashboard web en tiempo real.
 """
 
 import sys

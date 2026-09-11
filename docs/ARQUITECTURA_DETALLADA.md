@@ -1,8 +1,9 @@
 # Documentación Técnica y Arquitectura del Sistema — SIVARH (v2, Fase 4)
 
 **Proyecto:** SIVARH: Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga orientado a la detección preventiva del arrojo directo de residuos sólidos, sector Puente Huallaga – UNHEVAL.  
-**Investigación sobre la Problemática del Arrojo de Residuos Sólidos en las Riberas del Río Huallaga y Estrategias Preventivas Basadas en Inteligencia Artificial**  
-*Universidad Nacional Hermilio Valdizán (UNHEVAL) — Facultad de Ingeniería / Proyecto de Investigación Aplicada CyT (2026-II)*
+*Universidad Nacional Hermilio Valdizán (UNHEVAL) — Facultad de Ciencias de la Educación*  
+*Escuela Profesional de Matemática y Física — Asignatura: Ciencias Naturales y del Ambiente (Semestre 2026-II)*  
+*Proyecto de Investigación Aplicada en Ciencia y Tecnología (CyT)*
 
 ---
 

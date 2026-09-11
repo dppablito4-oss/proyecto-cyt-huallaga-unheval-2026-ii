@@ -4,7 +4,9 @@
 
 > Para una guía actualizada y fácil de navegar del código, los modos de prueba y los endpoints, consulta [docs/GUIA_DEL_REPOSITORIO.md](docs/GUIA_DEL_REPOSITORIO.md).
 
-*Proyecto de Investigación Aplicada en Ciencia y Tecnología (CyT) — Universidad Nacional Hermilio Valdizán (UNHEVAL), Huánuco, Perú (2026-II).*
+*Universidad Nacional Hermilio Valdizán (UNHEVAL) — Huánuco, Perú*  
+*Facultad de Ciencias de la Educación — Escuela Profesional de Matemática y Física*  
+*Asignatura: Ciencias Naturales y del Ambiente (Semestre 2026-II) &bull; Proyecto de Investigación CyT*
 
 ---
 

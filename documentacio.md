@@ -2,7 +2,10 @@
 ## Documentación Técnica Oficial y Arquitectura del Sistema (v2)
 
 **Orientado a la detección preventiva del arrojo directo de residuos sólidos, sector Puente Huallaga – UNHEVAL**  
-*Proyecto de Investigación Aplicada en Ciencia y Tecnología (CyT) — Universidad Nacional Hermilio Valdizán (UNHEVAL), Huánuco, Perú (2026-II)*
+*Universidad Nacional Hermilio Valdizán (UNHEVAL) — Huánuco, Perú*  
+*Facultad de Ciencias de la Educación — Escuela Profesional de Matemática y Física*  
+*Asignatura: Ciencias Naturales y del Ambiente (Semestre 2026-II)*  
+*Proyecto de Investigación Aplicada en Ciencia y Tecnología (CyT)*
 
 ---
 

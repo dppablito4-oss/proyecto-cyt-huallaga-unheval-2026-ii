@@ -47,7 +47,7 @@ logger = logging.getLogger("HuallagaAIMonitor")
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="SIVARH: Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga orientado a la detección preventiva del arrojo directo de residuos sólidos, sector Puente Huallaga – UNHEVAL."
+    description="SIVARH: Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga. UNHEVAL - Facultad de Ciencias de la Educación, Escuela Profesional de Matemática y Física. Curso: Ciencias Naturales y del Ambiente (2026-II)."
 )
 
 # Habilitar CORS (Cross-Origin Resource Sharing) para facilitar pruebas y desarrollo
