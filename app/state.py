@@ -57,6 +57,15 @@ class SystemStatusModel(BaseModel):
     confirmed_associations: int = Field(0, description="Relaciones que cumplieron score y persistencia mínimos.")
     active_pose_tracks: int = Field(0, description="Personas con una pose reciente disponible.")
     pose_enabled: bool = Field(False, description="Indica si el análisis selectivo de pose fue habilitado.")
+    pose_available: bool = Field(False, description="Indica si el runtime de pose fue inicializado correctamente.")
+    local_event_candidates: int = Field(0, description="Hipótesis espacio-temporales activas.")
+    confirmed_local_events: int = Field(0, description="Hipótesis confirmadas por evidencia local.")
+    openai_fallback_enabled: bool = Field(False, description="OpenAI se reserva para casos ambiguos.")
+    events_sent_openai: int = Field(0, description="Eventos enviados a verificación externa en la sesión.")
+    events_confirmed_local: int = Field(0, description="Eventos resueltos localmente sin OpenAI.")
+    local_warning_audio_enabled: bool = Field(False, description="Prioriza advertencias WAV locales.")
+    last_audio_source: Optional[str] = Field(None, description="Última fuente de audio utilizada.")
+    performance: Dict[str, Any] = Field(default_factory=dict, description="Métricas agregadas del nodo edge.")
     active_event: bool = Field(False, description="Indica si existe una ventana de captura de evento activa.")
     cooldown_remaining: float = Field(0.0, description="Segundos restantes de enfriamiento activo.")
     last_event_time: Optional[str] = Field(None, description="Marca de tiempo ISO del último evento detectado.")
@@ -101,6 +110,13 @@ class SystemState:
         self._association_candidates = 0
         self._confirmed_associations = 0
         self._active_pose_tracks = 0
+        self._pose_available = False
+        self._local_event_candidates = 0
+        self._confirmed_local_events = 0
+        self._events_sent_openai = 0
+        self._events_confirmed_local = 0
+        self._last_audio_source: Optional[str] = None
+        self._performance: Dict[str, Any] = {}
         self._active_event = False
         self._cooldown_remaining = 0.0
         self._last_event_time: Optional[datetime] = None
@@ -167,6 +183,15 @@ class SystemState:
                 "confirmed_associations": self._confirmed_associations,
                 "active_pose_tracks": self._active_pose_tracks,
                 "pose_enabled": settings.POSE_ENABLED,
+                "pose_available": self._pose_available,
+                "local_event_candidates": self._local_event_candidates,
+                "confirmed_local_events": self._confirmed_local_events,
+                "openai_fallback_enabled": settings.OPENAI_FALLBACK_ENABLED,
+                "events_sent_openai": self._events_sent_openai,
+                "events_confirmed_local": self._events_confirmed_local,
+                "local_warning_audio_enabled": settings.USE_LOCAL_WARNING_AUDIO,
+                "last_audio_source": self._last_audio_source,
+                "performance": dict(self._performance),
                 "active_event": self._active_event,
                 "cooldown_remaining": self._cooldown_remaining,
                 "last_event_time": self._last_event_time.isoformat() if self._last_event_time else None,
@@ -227,6 +252,9 @@ class SystemState:
         association_candidates: int = 0,
         confirmed_associations: int = 0,
         active_pose_tracks: int = 0,
+        pose_available: bool = False,
+        local_event_candidates: int = 0,
+        confirmed_local_events: int = 0,
     ) -> None:
         """Publica el resumen espacial derivado de SceneState."""
         with self._lock:
@@ -239,6 +267,9 @@ class SystemState:
             self._association_candidates = association_candidates
             self._confirmed_associations = confirmed_associations
             self._active_pose_tracks = active_pose_tracks
+            self._pose_available = pose_available
+            self._local_event_candidates = local_event_candidates
+            self._confirmed_local_events = confirmed_local_events
 
     def set_cooldown_remaining(self, seconds: float) -> None:
         """Actualiza el tiempo restante de enfriamiento."""
@@ -281,7 +312,9 @@ class SystemState:
         decision: Optional[str] = None,
         diagnosis: Optional[str] = None,
         warning_message: Optional[str] = None,
-        latency: Optional[float] = None
+        latency: Optional[float] = None,
+        openai_used: bool = False,
+        local_confirmed: bool = False,
     ) -> None:
         """Registra el resultado entregado por VisionAI y la decisión final."""
         with self._lock:
@@ -293,11 +326,25 @@ class SystemState:
             if latency is not None:
                 self._ai_latency = latency
             self._total_events_processed += 1
+            if openai_used:
+                self._events_sent_openai += 1
+            if local_confirmed:
+                self._events_confirmed_local += 1
 
     def mark_alert_emitted(self) -> None:
         """Marca como atendida la advertencia que estaba pendiente de emisión manual."""
         with self._lock:
             self._alert_pending = False
+
+    def set_audio_source(self, source: Optional[str]) -> None:
+        """Publica si la advertencia provino de plantilla, caché, TTS o falló."""
+        with self._lock:
+            self._last_audio_source = source
+
+    def set_performance(self, performance: Dict[str, Any]) -> None:
+        """Publica un snapshot agregado listo para REST y WebSocket."""
+        with self._lock:
+            self._performance = dict(performance)
 
 
 # Instancia global accesible en toda la aplicación (Singleton)

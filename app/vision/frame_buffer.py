@@ -104,6 +104,49 @@ class FrameBuffer:
                 next_target = start_time + timedelta(seconds=interval_seconds * (len(selected) + 1))
         return selected
 
+    def get_nearest_frame(
+        self,
+        timestamp: datetime,
+        max_delta_seconds: float | None = None,
+    ) -> Tuple[datetime, Any] | None:
+        """Devuelve la muestra temporalmente más cercana a un instante objetivo."""
+        with self._lock:
+            if not self.buffer:
+                return None
+            nearest = min(
+                self.buffer,
+                key=lambda item: abs((item[0] - timestamp).total_seconds()),
+            )
+        delta = abs((nearest[0] - timestamp).total_seconds())
+        if max_delta_seconds is not None and delta > max_delta_seconds:
+            return None
+        return nearest
+
+    def get_frames_between(
+        self,
+        start: datetime,
+        end: datetime,
+    ) -> List[Tuple[datetime, Any]]:
+        """Obtiene un intervalo inclusivo y ordenado sin alterar el buffer."""
+        if end < start:
+            raise ValueError("end debe ser igual o posterior a start.")
+        with self._lock:
+            return [item for item in self.buffer if start <= item[0] <= end]
+
+    def get_context(
+        self,
+        timestamp: datetime,
+        before: float = 2.0,
+        after: float = 2.0,
+    ) -> List[Tuple[datetime, Any]]:
+        """Obtiene contexto temporal alrededor de un instante relevante."""
+        if before < 0 or after < 0:
+            raise ValueError("before y after no pueden ser negativos.")
+        return self.get_frames_between(
+            timestamp - timedelta(seconds=before),
+            timestamp + timedelta(seconds=after),
+        )
+
     def clear(self) -> None:
         """Vacía todos los cuadros almacenados en el buffer."""
         with self._lock:

@@ -12,11 +12,11 @@
 
 ## Estado actual del prototipo
 
-La versión actual implementa un flujo experimental de extremo a extremo: captura de video, detección local multiclase, tracking anónimo con ByteTrack, estado espacial por cámara, zonas poligonales, análisis multimodal, decisión, síntesis de voz, persistencia local y dashboard.
+La versión actual implementa un flujo experimental de extremo a extremo: captura de video, detección local multiclase, tracking anónimo con ByteTrack, estado espacial por cámara, zonas poligonales, pose corporal selectiva opcional, análisis multimodal, decisión, síntesis de voz, persistencia local y dashboard.
 
 La captura permanece activa mientras el evento acumula contexto y mientras la IA o el TTS procesan el resultado. El análisis se ejecuta en un hilo independiente y se admite un solo evento activo a la vez. Para reducir el consumo de RAM, la cámara puede operar a su FPS normal, pero el buffer conserva por defecto solo **5 muestras por segundo durante 5 segundos** (máximo 25 frames antes de la selección final).
 
-Las Fases 1–4 de SIVARH v2 incorporan IDs temporales persistentes, trayectoria acotada, limpieza por TTL, `SceneState`, zonas configurables, overlay opcional, detección multiclase y asociación persona–objeto con consistencia temporal. Por compatibilidad, el disparo de eventos todavía usa únicamente la presencia de personas; cambiará a evidencia espacio-temporal en las fases posteriores.
+Las Fases 1–9 de SIVARH v2 incorporan IDs temporales persistentes, trayectoria acotada, `SceneState`, zonas, pose selectiva, asociación persona–objeto y razonamiento temporal local. `EventManager` ya no dispara por presencia; los casos `CONFIRMED` se resuelven en el edge y sólo los `UNCERTAIN` usan OpenAI como fallback con metadata y 2–4 keyframes. Las alertas priorizan una plantilla WAV local, reutilizan una caché por contenido y reservan OpenAI TTS para mensajes dinámicos cuando no existe audio local utilizable.
 
 ---
 
@@ -115,6 +115,8 @@ huallaga-ai-monitor/
 │   │   ├── tracking.py               # TrackedObject, TrackState y trayectoria
 │   │   ├── scene.py                  # SceneState y contratos de zonas
 │   │   ├── association.py            # Señales y asociación persona-objeto
+│   │   ├── pose.py                   # Landmarks corporales útiles y efímeros
+│   │   ├── reasoning.py              # Estado de objeto, evidencia y EventCandidate
 │   │   ├── analysis.py               # Esquema estructurado AIAnalysisResult
 │   │   ├── camera.py                 # Estado técnico de cámara
 │   │   └── metrics.py                # Métricas experimentales (latencia, payload)
@@ -132,11 +134,14 @@ huallaga-ai-monitor/
 │   │   ├── zones.py                  # Zonas poligonales normalizadas por cámara
 │   │   ├── debug_overlay.py          # Overlay opcional de tracking y zonas
 │   │   ├── associations.py           # Scorer y persistencia persona-objeto
+│   │   ├── pose.py                   # MediaPipe opcional con activación selectiva
 │   │   ├── frame_buffer.py           # Buffer circular muestreado en RAM (5s a 5 FPS por defecto)
 │   │   ├── frame_selector.py         # Muestreo temporal uniforme de frames
 │   │   └── image_processor.py        # Compresión JPEG, resize y Base64
 │   │
 │   ├── events/                       # Gestión de Eventos y Reglas de Negocio
+│   │   ├── engine.py                 # Motor continuo de candidatos locales
+│   │   ├── object_state.py           # Máquina de estados temporal de objetos
 │   │   ├── manager.py                # Orquestador del ciclo de vida del evento
 │   │   ├── cooldown.py               # Filtro temporal para evitar duplicidad
 │   │   └── rules.py                  # DecisionEngine (IGNORE / LOG_ONLY / WARN)
@@ -150,6 +155,7 @@ huallaga-ai-monitor/
 │   ├── speech/                       # Síntesis y Salida de Audio
 │   │   ├── service.py                # Interfaz abstracta SpeechService
 │   │   ├── openai_tts.py             # Generación de voz con OpenAI TTS (/v1/audio/speech)
+│   │   ├── cached_warning.py         # Plantilla/caché local con fallback TTS
 │   │   └── audio_output.py           # Reproductor en altavoces de la estación
 │   │
 │   ├── storage/                      # Persistencia de Datos
@@ -237,6 +243,21 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+MediaPipe Pose es un extra opcional. Para habilitarlo:
+
+```bash
+pip install -r requirements-pose.txt
+python scripts/download_pose_model.py
+```
+
+Después establece `POSE_ENABLED=True`. Sin ese extra o sin el modelo, SIVARH continúa con asociación geométrica y temporal.
+
+La plantilla de advertencia local ya se incluye en `data/audio/templates/`. Para regenerarla offline con otra frase o voz instalada:
+
+```bash
+python scripts/generate_local_warning.py --overwrite
+```
+
 ### 3. Variables de entorno
 Copia el archivo `.env.example` a `.env`:
 ```bash
@@ -261,6 +282,13 @@ VISION_DEBUG_OVERLAY=False
 ASSOCIATION_ENABLED=True
 ASSOCIATION_MIN_SCORE=0.65
 ASSOCIATION_MIN_DURATION=0.5
+ASSOCIATION_HAND_WEIGHT=0.25
+POSE_ENABLED=False
+POSE_MODEL_PATH=data/models/pose_landmarker_lite.task
+POSE_FPS=7
+OPENAI_FALLBACK_ENABLED=True
+OPENAI_MAX_FRAMES=3
+EVENT_MIN_CONTEXT_SECONDS=1.0
 BUFFER_SECONDS=5
 BUFFER_FPS=5
 ```
@@ -331,7 +359,8 @@ El diseño adopta principios de minimización de datos y evita deliberadamente l
 Estas mejoras forman parte de la hoja de ruta y **no se consideran implementadas en la versión actual**:
 
 - evaluación futura de BoT-SORT y modelos SIVARH con clases propias de residuos;
-- pose estimation y segmentación para generar mejores eventos candidatos;
+- medir y ajustar CPU, RAM, FPS, latencias y porcentaje real de eventos enviados a IA;
+- segmentación como posible señal experimental adicional;
 - métricas completas de latencia, payload, precisión, recall y falsos positivos;
 - conjunto de videos positivos y negativos etiquetados;
 - reconexión automática de cámaras RTSP/USB;

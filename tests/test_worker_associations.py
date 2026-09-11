@@ -5,6 +5,7 @@ import numpy as np
 from app.camera.worker import VideoPipelineWorker
 from app.models.detection import DetectionFrame
 from app.models.event import BoundingBox
+from app.models.pose import PosePoint, PoseState
 from app.models.tracking import Point, TrackedObject, TrackState
 from app.state import system_state
 
@@ -58,6 +59,24 @@ def test_worker_publishes_confirmed_person_object_association():
 
     worker = VideoPipelineWorker()
     worker._tracker = FakeTracker()
+
+    class FakePoseAnalyzer:
+        available = True
+
+        def update(self, frame, scene, force_track_ids=None):
+            return {
+                1: PoseState(
+                    track_id=1,
+                    timestamp=scene.timestamp,
+                    confidence=0.95,
+                    right_wrist=PosePoint(x=62.5, y=67.5, visibility=0.95),
+                )
+            }
+
+        def reset(self):
+            return None
+
+    worker._pose_analyzer = FakePoseAnalyzer()
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
     empty_detection = DetectionFrame(timestamp=started)
     try:
@@ -72,8 +91,12 @@ def test_worker_publishes_confirmed_person_object_association():
         assert confirmed.associations[0].confirmed is True
         assert confirmed.associations[0].person_track_id == 1
         assert confirmed.associations[0].object_track_id == 8
+        assert confirmed.associations[0].signals.hand_proximity == 1.0
+        assert confirmed.persons[1].pose is not None
         status = system_state.to_dict()
         assert status["association_candidates"] == 1
         assert status["confirmed_associations"] == 1
+        assert status["active_pose_tracks"] == 1
+        assert status["pose_available"] is True
     finally:
         worker.stop()

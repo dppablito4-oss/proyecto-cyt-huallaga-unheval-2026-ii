@@ -27,9 +27,12 @@ class LocalDetector:
         model_name: str = "yolov8n.pt",
         confidence_threshold: float = 0.5,
         monitored_classes: Sequence[str] = ("person",),
+        image_size: int = 640,
     ):
         if not 0.0 <= confidence_threshold <= 1.0:
             raise ValueError("confidence_threshold debe estar entre 0 y 1.")
+        if image_size < 160:
+            raise ValueError("image_size debe ser al menos 160.")
         normalized = tuple(
             dict.fromkeys(
                 name.strip().casefold()
@@ -42,6 +45,7 @@ class LocalDetector:
         self.model_name = model_name
         self.confidence_threshold = float(confidence_threshold)
         self.monitored_classes = normalized
+        self.image_size = int(image_size)
         self.model = None
         self._initialized = False
         self._unknown_classes_reported: tuple[str, ...] = ()
@@ -112,6 +116,7 @@ class LocalDetector:
                 frame,
                 classes=class_ids,
                 conf=self.confidence_threshold,
+                imgsz=self.image_size,
                 verbose=False,
             )
             detections: list[Detection] = []

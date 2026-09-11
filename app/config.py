@@ -39,7 +39,7 @@ class Settings(BaseModel):
     # 1. Configuración General de la Aplicación
     # ==========================================
     APP_NAME: str = "SIVARH"
-    APP_VERSION: str = "0.6.0"
+    APP_VERSION: str = "0.10.0"
     APP_ENV: str = os.getenv("APP_ENV", "development")
     DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
     HOST: str = os.getenv("HOST", "127.0.0.1")
@@ -65,6 +65,34 @@ class Settings(BaseModel):
     OPENAI_TTS_RESPONSE_FORMAT: str = os.getenv("OPENAI_TTS_RESPONSE_FORMAT", "pcm")
     # Pequeño búfer para absorber variaciones de red sin entrecortar la advertencia.
     OPENAI_TTS_STREAM_BUFFER_MS: int = int(os.getenv("OPENAI_TTS_STREAM_BUFFER_MS", "400"))
+    USE_LOCAL_WARNING_AUDIO: bool = os.getenv("USE_LOCAL_WARNING_AUDIO", "True").lower() in (
+        "true", "1", "yes"
+    )
+    OPENAI_TTS_FALLBACK_ENABLED: bool = os.getenv(
+        "OPENAI_TTS_FALLBACK_ENABLED", "True"
+    ).lower() in ("true", "1", "yes")
+    LOCAL_WARNING_MESSAGE: str = os.getenv(
+        "LOCAL_WARNING_MESSAGE",
+        "Cuidemos juntos el Huallaga. Por favor, recoge el residuo y deposítalo en un contenedor.",
+    )
+    LOCAL_WARNING_AUDIO_PATH: Path = Path(
+        os.getenv(
+            "LOCAL_WARNING_AUDIO_PATH",
+            str(
+                Path(__file__).resolve().parent.parent
+                / "data"
+                / "audio"
+                / "templates"
+                / "warning_default.wav"
+            ),
+        )
+    )
+    TTS_CACHE_DIR: Path = Path(
+        os.getenv(
+            "TTS_CACHE_DIR",
+            str(Path(__file__).resolve().parent.parent / "data" / "audio" / "cache"),
+        )
+    )
 
     # ==========================================
     # 3. Adquisición de Video (Cámara / Stream)
@@ -82,6 +110,8 @@ class Settings(BaseModel):
     # ==========================================
     # Utilizado por `app.vision.detector.LocalDetector` como filtro de bajo costo
     YOLO_MODEL: str = os.getenv("YOLO_MODEL", "yolov8n.pt")
+    YOLO_IMGSZ: int = Field(default=int(os.getenv("YOLO_IMGSZ", "640")), ge=160)
+    DETECTION_FPS: float = Field(default=float(os.getenv("DETECTION_FPS", "10")), gt=0.0)
     # Alias heredado: se conserva para instalaciones existentes.
     YOLO_PERSON_CONFIDENCE: float = Field(
         default=float(os.getenv("YOLO_PERSON_CONFIDENCE", "0.50")), ge=0.0, le=1.0
@@ -231,6 +261,93 @@ class Settings(BaseModel):
     )
 
     # ==========================================
+    # 4.5. Razonamiento temporal local (SIVARH v2)
+    # ==========================================
+    OBJECT_CARRIED_SCORE: float = Field(
+        default=float(os.getenv("OBJECT_CARRIED_SCORE", "0.70")), ge=0.0, le=1.0
+    )
+    OBJECT_CARRIED_SECONDS: float = Field(
+        default=float(os.getenv("OBJECT_CARRIED_SECONDS", "0.5")), ge=0.0
+    )
+    OBJECT_RELEASE_SCORE: float = Field(
+        default=float(os.getenv("OBJECT_RELEASE_SCORE", "0.35")), ge=0.0, le=1.0
+    )
+    OBJECT_RELEASE_GRACE_SECONDS: float = Field(
+        default=float(os.getenv("OBJECT_RELEASE_GRACE_SECONDS", "0.3")), ge=0.0
+    )
+    OBJECT_STATIONARY_SECONDS: float = Field(
+        default=float(os.getenv("OBJECT_STATIONARY_SECONDS", "2.0")), gt=0.0
+    )
+    OBJECT_STATIONARY_MAX_DISTANCE_PX: float = Field(
+        default=float(os.getenv("OBJECT_STATIONARY_MAX_DISTANCE_PX", "12.0")), gt=0.0
+    )
+    OBJECT_STATE_TTL_SECONDS: float = Field(
+        default=float(os.getenv("OBJECT_STATE_TTL_SECONDS", "10.0")), gt=0.0
+    )
+    PERSON_MOVING_AWAY_SECONDS: float = Field(
+        default=float(os.getenv("PERSON_MOVING_AWAY_SECONDS", "1.0")), gt=0.0
+    )
+    PERSON_MOVING_AWAY_MIN_DISTANCE_PX: float = Field(
+        default=float(os.getenv("PERSON_MOVING_AWAY_MIN_DISTANCE_PX", "30.0")), gt=0.0
+    )
+    EVENT_RELEVANT_ZONES: tuple[str, ...] = tuple(
+        dict.fromkeys(
+            name.strip().casefold()
+            for name in os.getenv(
+                "EVENT_RELEVANT_ZONES",
+                "riverbank,river_edge,water",
+            ).split(",")
+            if name.strip()
+        )
+    )
+    LOCAL_IGNORE_THRESHOLD: float = Field(
+        default=float(os.getenv("LOCAL_IGNORE_THRESHOLD", "0.35")), ge=0.0, le=1.0
+    )
+    LOCAL_CONFIRM_THRESHOLD: float = Field(
+        default=float(os.getenv("LOCAL_CONFIRM_THRESHOLD", "0.75")), ge=0.0, le=1.0
+    )
+    EVENT_CARRIED_WEIGHT: float = Field(
+        default=float(os.getenv("EVENT_CARRIED_WEIGHT", "0.25")), ge=0.0
+    )
+    EVENT_RELEASE_WEIGHT: float = Field(
+        default=float(os.getenv("EVENT_RELEASE_WEIGHT", "0.25")), ge=0.0
+    )
+    EVENT_TARGET_ZONE_WEIGHT: float = Field(
+        default=float(os.getenv("EVENT_TARGET_ZONE_WEIGHT", "0.20")), ge=0.0
+    )
+    EVENT_STATIONARY_WEIGHT: float = Field(
+        default=float(os.getenv("EVENT_STATIONARY_WEIGHT", "0.15")), ge=0.0
+    )
+    EVENT_MOVING_AWAY_WEIGHT: float = Field(
+        default=float(os.getenv("EVENT_MOVING_AWAY_WEIGHT", "0.15")), ge=0.0
+    )
+
+    # ==========================================
+    # 4.6. Verificación multimodal como fallback (SIVARH v2)
+    # ==========================================
+    OPENAI_FALLBACK_ENABLED: bool = os.getenv("OPENAI_FALLBACK_ENABLED", "True").lower() in (
+        "true", "1", "yes"
+    )
+    OPENAI_MAX_FRAMES: int = Field(
+        default=int(os.getenv("OPENAI_MAX_FRAMES", "3")), ge=2, le=4
+    )
+    EVENT_MIN_CONTEXT_SECONDS: float = Field(
+        default=float(os.getenv("EVENT_MIN_CONTEXT_SECONDS", "1.0")), ge=0.0
+    )
+    EVENT_KEYFRAME_BEFORE_SECONDS: float = Field(
+        default=float(os.getenv("EVENT_KEYFRAME_BEFORE_SECONDS", "1.0")), ge=0.0
+    )
+    EVENT_KEYFRAME_AFTER_SECONDS: float = Field(
+        default=float(os.getenv("EVENT_KEYFRAME_AFTER_SECONDS", "1.0")), ge=0.0
+    )
+    METRICS_WINDOW_SECONDS: float = Field(
+        default=float(os.getenv("METRICS_WINDOW_SECONDS", "10.0")), gt=0.0
+    )
+    PERFORMANCE_LOG_INTERVAL_SECONDS: float = Field(
+        default=float(os.getenv("PERFORMANCE_LOG_INTERVAL_SECONDS", "10.0")), gt=0.0
+    )
+
+    # ==========================================
     # 5. Buffer Circular y Gestión de Eventos
     # ==========================================
     # BUFFER_SECONDS: Tiempo en segundos de video mantenido en RAM por `app.vision.frame_buffer.FrameBuffer`
@@ -282,6 +399,19 @@ class Settings(BaseModel):
         )
         if total <= 0:
             raise ValueError("Al menos un peso de asociación debe ser mayor que cero.")
+        event_weight_total = (
+            self.EVENT_CARRIED_WEIGHT
+            + self.EVENT_RELEASE_WEIGHT
+            + self.EVENT_TARGET_ZONE_WEIGHT
+            + self.EVENT_STATIONARY_WEIGHT
+            + self.EVENT_MOVING_AWAY_WEIGHT
+        )
+        if event_weight_total <= 0:
+            raise ValueError("Al menos un peso de evento debe ser mayor que cero.")
+        if self.LOCAL_IGNORE_THRESHOLD >= self.LOCAL_CONFIRM_THRESHOLD:
+            raise ValueError("LOCAL_IGNORE_THRESHOLD debe ser menor que LOCAL_CONFIRM_THRESHOLD.")
+        if self.OBJECT_RELEASE_SCORE >= self.OBJECT_CARRIED_SCORE:
+            raise ValueError("OBJECT_RELEASE_SCORE debe ser menor que OBJECT_CARRIED_SCORE.")
         return self
 
 

@@ -32,8 +32,9 @@ from app.camera.usb_camera import UsbCamera
 from app.camera.video_file import VideoFileCamera
 from app.vision.detector import LocalDetector
 from app.vision.frame_buffer import FrameBuffer
-from app.vision.frame_selector import FrameSelector
+from app.vision.frame_selector import EventKeyframeSelector, FrameSelector
 from app.vision.image_processor import ImageProcessor
+from app.vision.scheduler import MonotonicRateLimiter
 from app.vision.tracker import create_tracker
 from app.vision.zones import ZoneManager
 from app.vision.debug_overlay import VisionDebugOverlay
@@ -44,13 +45,18 @@ from app.vision.associations import (
     PersonObjectAssociationEngine,
 )
 from app.events.manager import EventManager
+from app.events.engine import EventEngine, EventScoreWeights
+from app.events.object_state import ObjectStateMachine
 from app.events.rules import DecisionEngine
 from app.ai.vision_client import VisionAI
 from app.speech.openai_tts import OpenAISpeechService
 from app.speech.audio_output import LocalSpeakerOutput
+from app.speech.cached_warning import CachedWarningSpeechService
 from app.storage.local_repository import SQLiteEventsRepository
 from app.models.event import EventModel, LocalDetectionSummary
 from app.models.scene import SceneState
+from app.models.metrics import SystemMetrics
+from app.metrics.collector import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +99,13 @@ class VideoPipelineWorker:
             model_name=settings.YOLO_MODEL,
             confidence_threshold=settings.DETECTION_CONFIDENCE,
             monitored_classes=settings.DETECTION_CLASSES,
+            image_size=settings.YOLO_IMGSZ,
         )
+        self._detection_limiter = MonotonicRateLimiter(settings.DETECTION_FPS)
+        self._metrics = MetricsCollector(
+            rate_window_seconds=settings.METRICS_WINDOW_SECONDS
+        )
+        self._last_performance_log = 0.0
         self._frame_buffer = FrameBuffer(
             buffer_seconds=settings.BUFFER_SECONDS,
             fps=settings.BUFFER_FPS
@@ -101,6 +113,11 @@ class VideoPipelineWorker:
         self._frame_selector = FrameSelector(
             target_frames=settings.FRAMES_PER_ANALYSIS,
             strategy="uniform"
+        )
+        self._event_keyframe_selector = EventKeyframeSelector(
+            max_frames=settings.OPENAI_MAX_FRAMES,
+            before_seconds=settings.EVENT_KEYFRAME_BEFORE_SECONDS,
+            after_seconds=settings.EVENT_KEYFRAME_AFTER_SECONDS,
         )
         self._image_processor = ImageProcessor(
             max_width=settings.IMAGE_MAX_WIDTH,
@@ -156,16 +173,59 @@ class VideoPipelineWorker:
                 trajectory_points=settings.ASSOCIATION_TRAJECTORY_POINTS,
             ),
         )
+        object_state_machine = ObjectStateMachine(
+            carried_score=settings.OBJECT_CARRIED_SCORE,
+            carried_seconds=settings.OBJECT_CARRIED_SECONDS,
+            release_score=settings.OBJECT_RELEASE_SCORE,
+            release_grace_seconds=settings.OBJECT_RELEASE_GRACE_SECONDS,
+            stationary_seconds=settings.OBJECT_STATIONARY_SECONDS,
+            stationary_max_distance_px=settings.OBJECT_STATIONARY_MAX_DISTANCE_PX,
+            moving_away_seconds=settings.PERSON_MOVING_AWAY_SECONDS,
+            moving_away_min_distance_px=settings.PERSON_MOVING_AWAY_MIN_DISTANCE_PX,
+            state_ttl_seconds=settings.OBJECT_STATE_TTL_SECONDS,
+            relevant_zones=settings.EVENT_RELEVANT_ZONES,
+        )
+        self._event_engine = EventEngine(
+            object_state_machine=object_state_machine,
+            ignore_threshold=settings.LOCAL_IGNORE_THRESHOLD,
+            confirm_threshold=settings.LOCAL_CONFIRM_THRESHOLD,
+            relevant_zones=settings.EVENT_RELEVANT_ZONES,
+            weights=EventScoreWeights(
+                carried=settings.EVENT_CARRIED_WEIGHT,
+                release=settings.EVENT_RELEASE_WEIGHT,
+                target_zone=settings.EVENT_TARGET_ZONE_WEIGHT,
+                stationary=settings.EVENT_STATIONARY_WEIGHT,
+                moving_away=settings.EVENT_MOVING_AWAY_WEIGHT,
+            ),
+        )
         self._event_manager = EventManager(
             cooldown_seconds=settings.EVENT_COOLDOWN_SECONDS,
             camera_id=settings.CAMERA_ID,
+            minimum_context_seconds=settings.EVENT_MIN_CONTEXT_SECONDS,
         )
         self._decision_engine = DecisionEngine(
-            warning_threshold=settings.AI_WARNING_THRESHOLD
+            warning_threshold=settings.AI_WARNING_THRESHOLD,
+            local_ignore_threshold=settings.LOCAL_IGNORE_THRESHOLD,
+            local_confirm_threshold=settings.LOCAL_CONFIRM_THRESHOLD,
         )
         self._vision_ai = VisionAI()
         self._tts_service = OpenAISpeechService()
         self._audio_output = LocalSpeakerOutput()
+        local_audio_path = settings.LOCAL_WARNING_AUDIO_PATH
+        if not local_audio_path.is_absolute():
+            local_audio_path = settings.BASE_DIR / local_audio_path
+        tts_cache_dir = settings.TTS_CACHE_DIR
+        if not tts_cache_dir.is_absolute():
+            tts_cache_dir = settings.BASE_DIR / tts_cache_dir
+        self._warning_speech = CachedWarningSpeechService(
+            template_path=local_audio_path,
+            cache_dir=tts_cache_dir,
+            generic_message=settings.LOCAL_WARNING_MESSAGE,
+            audio_output=self._audio_output,
+            tts_fallback=self._tts_service,
+            use_local_audio=settings.USE_LOCAL_WARNING_AUDIO,
+            tts_fallback_enabled=settings.OPENAI_TTS_FALLBACK_ENABLED,
+        )
         self._repository = SQLiteEventsRepository()
 
         # Frame compartido para streaming MJPEG (leído por el endpoint /api/cameras/stream)
@@ -202,6 +262,11 @@ class VideoPipelineWorker:
         self._tracker.reset()
         self._pose_analyzer.reset()
         self._association_engine.reset()
+        self._event_engine.reset()
+        self._event_manager.reset()
+        self._detection_limiter.reset()
+        self._metrics.reset_runtime()
+        self._last_performance_log = 0.0
         now = datetime.now()
         system_state.set_detection_status(persons=0, objects=0, counts_by_label={})
         system_state.set_scene_status(
@@ -239,6 +304,8 @@ class VideoPipelineWorker:
         self._tracker.reset()
         self._pose_analyzer.reset()
         self._association_engine.reset()
+        self._event_engine.reset()
+        self._event_manager.reset()
         stopped_at = datetime.now()
         system_state.set_detection_status(persons=0, objects=0, counts_by_label={})
         system_state.set_scene_status(
@@ -401,6 +468,7 @@ class VideoPipelineWorker:
     def _update_tracking(self, detection, frame, timestamp: datetime):
         """Actualiza tracking, zonas y SceneState para el frame actual."""
         try:
+            tracker_started = time.perf_counter()
             tracked_objects = self._tracker.update(
                 detection.detections,
                 timestamp=timestamp,
@@ -412,12 +480,39 @@ class VideoPipelineWorker:
             )
             self._tracker.assign_zones(assignments)
             active_states = self._tracker.active_states
+            self._metrics.record_stage(
+                "tracker",
+                elapsed_ms=(time.perf_counter() - tracker_started) * 1000.0,
+            )
             with self._scene_lock:
                 self._scene_state.update(active_states, zone_states, timestamp)
-                poses = self._pose_analyzer.update(frame, self._scene_state)
-                self._scene_state.set_poses(poses)
-                associations = self._association_engine.update(self._scene_state)
-                self._scene_state.set_associations(associations)
+                working_scene = self._scene_state.model_copy(deep=True)
+            # MediaPipe puede ser costoso; no mantener el lock de lectura del dashboard.
+            pose_started = time.perf_counter()
+            poses = self._pose_analyzer.update(frame, working_scene)
+            pose_elapsed_ms = (time.perf_counter() - pose_started) * 1000.0
+            pose_inferences = self._pose_analyzer.last_inference_count
+            if pose_inferences:
+                self._metrics.record_stage(
+                    "pose",
+                    elapsed_ms=pose_elapsed_ms / pose_inferences,
+                    count=pose_inferences,
+                )
+            working_scene.set_poses(poses)
+            associations = self._association_engine.update(working_scene)
+            working_scene.set_associations(associations)
+            event_engine_started = time.perf_counter()
+            candidates = self._event_engine.update(working_scene)
+            self._metrics.record_stage(
+                "event_engine",
+                elapsed_ms=(time.perf_counter() - event_engine_started) * 1000.0,
+            )
+            working_scene.set_reasoning(
+                self._event_engine.object_states,
+                candidates,
+            )
+            with self._scene_lock:
+                self._scene_state = working_scene
                 scene = self._scene_state.model_copy(deep=True)
             track_ids = [track.track_id for track in active_states]
             system_state.set_scene_status(
@@ -438,11 +533,32 @@ class VideoPipelineWorker:
                     person.pose is not None
                     for person in scene.persons.values()
                 ),
+                pose_available=self._pose_analyzer.available,
+                local_event_candidates=len(scene.event_candidates),
+                confirmed_local_events=sum(
+                    candidate.state == "CONFIRMED"
+                    for candidate in scene.event_candidates
+                ),
             )
             for track_id in self._tracker.last_created_track_ids:
                 system_state.add_log("TRACK", f"[TRACK] Track #{track_id} creado.")
             for track_id in self._tracker.last_expired_track_ids:
                 system_state.add_log("TRACK", f"[TRACK] Track #{track_id} expirado.")
+            for object_id, previous, current in self._event_engine.object_state_machine.last_transitions:
+                system_state.add_log(
+                    "STATE",
+                    f"[STATE] Objeto #{object_id} {previous.value} -> {current.value}.",
+                )
+            for candidate_id in self._event_engine.last_created_candidate_ids:
+                system_state.add_log(
+                    "EVENT",
+                    f"[EVENT] Candidato local {candidate_id[:8]} creado.",
+                )
+            for candidate_id in self._event_engine.last_confirmed_candidate_ids:
+                system_state.add_log(
+                    "EVENT",
+                    f"[EVENT] Candidato local {candidate_id[:8]} confirmado.",
+                )
             return scene
         except Exception as exc:
             logger.error("Error actualizando el estado espacial: %s", exc)
@@ -488,6 +604,7 @@ class VideoPipelineWorker:
                 continue
 
             frame_timestamp = datetime.now()
+            self._metrics.record_stage("capture")
 
             # Mantener la evidencia cruda separada del frame de depuración.
             with self._frame_lock:
@@ -499,6 +616,7 @@ class VideoPipelineWorker:
             # Medir FPS reales
             frame_count += 1
             elapsed = time.perf_counter() - fps_start_time
+            publish_performance = elapsed >= 1.0
             if elapsed >= 1.0:
                 measured_fps = frame_count / elapsed
                 frame_count = 0
@@ -507,18 +625,27 @@ class VideoPipelineWorker:
                     connected=True, source=settings.CAMERA_SOURCE, fps=round(measured_fps, 1)
                 )
 
-            # Detección local multiclase. El resumen heredado mantiene EventManager intacto.
-            detection_frame = self._detector.detect(frame, timestamp=frame_timestamp)
-            detection = detection_frame.to_local_summary()
-            system_state.set_detection_status(
-                persons=len(detection_frame.persons),
-                objects=len(detection_frame.objects),
-                counts_by_label=detection_frame.counts_by_label,
-            )
+            # YOLO y el razonamiento siguen un reloj monotónico independiente de la cámara.
+            candidate = None
+            if self._detection_limiter.is_due():
+                detector_started = time.perf_counter()
+                detection_frame = self._detector.detect(frame, timestamp=frame_timestamp)
+                self._metrics.record_stage(
+                    "detector",
+                    elapsed_ms=(time.perf_counter() - detector_started) * 1000.0,
+                )
+                detection = detection_frame.to_local_summary()
+                system_state.set_detection_status(
+                    persons=len(detection_frame.persons),
+                    objects=len(detection_frame.objects),
+                    counts_by_label=detection_frame.counts_by_label,
+                )
+                scene = self._update_tracking(detection_frame, frame, frame_timestamp)
+                if not settings.MANUAL_RECOGNITION_MODE:
+                    candidate = self._event_manager.select_candidate(scene.event_candidates)
+            else:
+                scene = self.current_scene
 
-            # Fases 1-3 de SIVARH v2: tracking y escena para detecciones multiclase.
-            # La generación de eventos continúa sin cambios hasta la Fase 7.
-            scene = self._update_tracking(detection_frame, frame, frame_timestamp)
             display_frame = self._debug_overlay.annotate(
                 frame,
                 scene,
@@ -534,13 +661,13 @@ class VideoPipelineWorker:
                 cooldown_rem = self._event_manager.cooldown_manager.remaining_seconds()
                 system_state.set_cooldown_remaining(cooldown_rem)
 
-            # Evaluar si se debe disparar un evento
-            if not settings.MANUAL_RECOGNITION_MODE and self._event_manager.should_trigger_event(detection):
-                event = self._event_manager.create_event(detection)
+            if candidate is not None:
+                event = self._event_manager.create_event(candidate, detection)
                 system_state.set_active_event(True)
                 system_state.add_log(
-                    "PERSON",
-                    f"[PERSONA] Detectada ({detection.persons} pers., {int(detection.max_confidence * 100)}% conf). Iniciando secuencia posterior a la deteccion..."
+                    "EVENT",
+                    f"[EVENT] {candidate.event_type} {candidate.state.value} "
+                    f"(score local {candidate.score:.2f}). Iniciando análisis.",
                 )
                 self._analysis_thread = threading.Thread(
                     target=self._process_event,
@@ -549,6 +676,40 @@ class VideoPipelineWorker:
                     daemon=True
                 )
                 self._analysis_thread.start()
+
+            if publish_performance:
+                performance = self._metrics.snapshot(
+                    active_tracks=scene.active_tracks,
+                    active_persons=len(scene.persons),
+                    active_objects=len(scene.objects),
+                    pose_active=sum(
+                        person.pose is not None for person in scene.persons.values()
+                    ),
+                    suspicious_candidates=len(scene.event_candidates),
+                )
+                system_state.set_performance(performance.model_dump(mode="json"))
+                now_monotonic = time.perf_counter()
+                if (
+                    now_monotonic - self._last_performance_log
+                    >= settings.PERFORMANCE_LOG_INTERVAL_SECONDS
+                ):
+                    self._last_performance_log = now_monotonic
+                    logger.info(
+                        "capture_fps=%.1f detect_fps=%.1f tracker_fps=%.1f "
+                        "pose_fps=%.1f tracks=%d persons=%d pose_active=%d "
+                        "latency_detector=%.1fms cpu=%.1f%% ram=%.1fMB openai=%.1f%%",
+                        performance.capture_fps,
+                        performance.detector_fps,
+                        performance.tracker_fps,
+                        performance.pose_fps,
+                        performance.active_tracks,
+                        performance.active_persons,
+                        performance.pose_active,
+                        performance.detector_latency_ms,
+                        performance.cpu_percent,
+                        performance.ram_mb,
+                        performance.openai_percentage,
+                    )
 
             # Limitar la velocidad del bucle si la cámara no tiene limitador propio
             time.sleep(0.001)
@@ -566,57 +727,115 @@ class VideoPipelineWorker:
         """
         try:
             logger.info(f"Procesando evento {event.id[:8]}...")
+            event_processing_started = time.perf_counter()
+
+            ai_result = None
+            ai_latency = None
+            jpeg_frames = []
+            jpeg_quality = self._image_processor.jpeg_quality
+            requests_fallback = (
+                is_manual
+                or (
+                    settings.OPENAI_FALLBACK_ENABLED
+                    and event.local_event_state == "UNCERTAIN"
+                )
+            )
 
             if is_manual:
                 jpeg_frames = list(manual_jpeg_frames or [])
                 system_state.add_log("SEQUENCE", f"[MANUAL] {len(jpeg_frames)} fotogramas preparados para consultar a la IA.")
-            else:
+            elif requests_fallback:
+                timestamps = event.event_trace.get("timestamps", {})
+                stationary_value = timestamps.get("stationary_since")
+                stationary_timestamp = (
+                    datetime.fromisoformat(stationary_value)
+                    if isinstance(stationary_value, str)
+                    else stationary_value
+                )
+                selected = self._event_keyframe_selector.select_event_frames(
+                    self._frame_buffer.get_all_frames(),
+                    release_timestamp=event.release_timestamp,
+                    stationary_timestamp=stationary_timestamp,
+                )
                 with self._runtime_config_lock:
-                    frames_per_analysis = settings.FRAMES_PER_ANALYSIS
-                    interval = settings.SEQUENCE_FRAME_INTERVAL_SECONDS
-                    capture_seconds = max(settings.EVENT_CAPTURE_SECONDS, frames_per_analysis * interval)
+                    jpeg_frames = [
+                        self._image_processor.compress_jpeg(frame)
+                        for _, frame in selected
+                    ]
+                    jpeg_quality = self._image_processor.jpeg_quality
                 system_state.add_log(
                     "SEQUENCE",
-                    f"[SECUENCIA] Capturando {frames_per_analysis} fotogramas, uno cada {interval:g}s durante {capture_seconds:g}s."
+                    f"[SECUENCIA] {len(jpeg_frames)} keyframes seleccionados alrededor de la liberación.",
                 )
-                time.sleep(capture_seconds)
-                selected = self._frame_buffer.get_frames_at_intervals(
-                    start_time=event.started_at,
-                    interval_seconds=interval,
-                    count=frames_per_analysis,
-                )
-                with self._runtime_config_lock:
-                    jpeg_frames = [self._image_processor.compress_jpeg(frame) for _, frame in selected]
-                    jpeg_quality = self._image_processor.jpeg_quality
 
             # 4. Actualizar metadata de captura
             event.capture.total_frames = len(jpeg_frames)
             event.capture.selected_frames = len(jpeg_frames)
-            if not is_manual:
-                event.capture.jpeg_quality = jpeg_quality
+            event.capture.jpeg_quality = jpeg_quality
 
-            # 6. Enviar a VisionAIClient midiendo tiempo exacto de respuesta
-            system_state.set_ai_status("sending")
-            system_state.add_log(
-                "AI",
-                f"[IA] Enviando {len(jpeg_frames)} fotogramas a OpenAI Vision ({settings.OPENAI_VISION_MODEL}, reasoning={settings.OPENAI_VISION_REASONING_EFFORT}, detalle={settings.IMAGE_DETAIL}). Esperando respuesta..."
+            can_call_openai = (
+                requests_fallback
+                and bool(jpeg_frames)
+                and getattr(self._vision_ai, "available", True)
             )
-
-            t_ai_start = time.perf_counter()
-            ai_result = self._vision_ai.analyze_sequence(jpeg_frames)
-            ai_latency = time.perf_counter() - t_ai_start
-
-            event.analysis = ai_result.model_dump()
-            system_state.set_ai_status("completed", latency=ai_latency)
-
-            system_state.add_log(
-                "SUCCESS",
-                f"[RESPUESTA IA] Recibida en {ai_latency:.2f}s: [{ai_result.event_type}] ({int(ai_result.confidence * 100)}% conf) - {ai_result.description}"
-            )
+            if can_call_openai:
+                system_state.set_ai_status("sending")
+                system_state.add_log(
+                    "AI",
+                    f"[IA FALLBACK] Enviando metadata y {len(jpeg_frames)} keyframes "
+                    f"a {settings.OPENAI_VISION_MODEL}.",
+                )
+                t_ai_start = time.perf_counter()
+                ai_result = self._vision_ai.analyze_sequence(
+                    jpeg_frames,
+                    event_metadata=event.openai_metadata(),
+                )
+                ai_latency = time.perf_counter() - t_ai_start
+                self._metrics.record_openai_latency(ai_latency * 1000.0)
+                event.openai_used = getattr(self._vision_ai, "last_call_used_api", True)
+                event.analysis = ai_result.model_dump()
+                event.openai_confidence = ai_result.confidence
+                system_state.set_ai_status("completed", latency=ai_latency)
+                system_state.add_log(
+                    "SUCCESS",
+                    f"[RESPUESTA IA] Recibida en {ai_latency:.2f}s: "
+                    f"[{ai_result.event_type}] ({int(ai_result.confidence * 100)}% conf) "
+                    f"- {ai_result.description}",
+                )
+            else:
+                system_state.set_ai_status("local_decision")
+                if requests_fallback:
+                    reason = "sin keyframes" if not jpeg_frames else "API no disponible"
+                    system_state.add_log(
+                        "AI",
+                        f"[IA FALLBACK] Verificación omitida ({reason}); se mantiene decisión local segura.",
+                    )
 
             # 7. Evaluar decisión
-            decision = self._decision_engine.evaluate_decision(ai_result)
+            decision = (
+                self._decision_engine.evaluate_decision(ai_result)
+                if is_manual and ai_result is not None
+                else self._decision_engine.evaluate(event, ai_result)
+            )
             event.decision = decision
+            event.final_decision = decision
+
+            result_confidence = (
+                ai_result.confidence
+                if ai_result is not None
+                else (event.local_event_score or 0.0)
+            )
+            result_description = (
+                ai_result.description
+                if ai_result is not None
+                else (
+                    f"Decisión local {event.local_event_state or 'sin candidato'} "
+                    f"con score {event.local_event_score or 0.0:.2f}."
+                )
+            )
+            warning_message = ai_result.warning_message if ai_result is not None else None
+            if decision == "WARN" and not warning_message:
+                warning_message = settings.LOCAL_WARNING_MESSAGE
 
             if decision == "WARN":
                 pending_text = " Alerta pendiente de emisión manual." if is_manual else ""
@@ -627,24 +846,88 @@ class VideoPipelineWorker:
                 system_state.add_log("INFO", f"[INFO] Decisión: IGNORE (Sin acción de arrojo detectada).")
 
             # 8. Actualizar estado del sistema
+            local_confirmed = (
+                event.local_event_state == "CONFIRMED"
+                and not event.openai_used
+            )
             system_state.record_analysis_result(
-                confidence=ai_result.confidence,
+                confidence=result_confidence,
                 decision=decision,
-                diagnosis=ai_result.description,
-                warning_message=ai_result.warning_message,
-                latency=ai_latency
+                diagnosis=result_description,
+                warning_message=warning_message,
+                latency=ai_latency,
+                openai_used=event.openai_used,
+                local_confirmed=local_confirmed,
             )
 
             # 9. Si la decisión es WARN, generar voz y reproducir
-            if decision == "WARN" and ai_result.warning_message and not is_manual:
-                system_state.add_log("AUDIO", f"[VOZ] Sintetizando advertencia: \"{ai_result.warning_message}\"")
-                system_state.add_log("AUDIO", "[AUDIO] Recibiendo PCM y reproduciendo advertencia en streaming...")
-                audio_path = f"data/audio/warning_{event.id[:8]}.wav"
-                generated = self._tts_service.generate_and_play_streaming(
-                    ai_result.warning_message, audio_path, self._audio_output
+            tts_latency_ms = 0.0
+            if decision == "WARN" and warning_message and not is_manual:
+                audio_started = time.perf_counter()
+                playback = self._warning_speech.emit(
+                    ai_result.warning_message if ai_result is not None else None
                 )
-                if generated:
-                    system_state.add_log("AUDIO", "[AUDIO] Advertencia finalizada y archivada en formato WAV.")
+                tts_latency_ms = (time.perf_counter() - audio_started) * 1000.0
+                event.metrics["audio_source"] = playback.source
+                system_state.set_audio_source(playback.source)
+                if playback.emitted:
+                    system_state.add_log(
+                        "AUDIO",
+                        f"[AUDIO] Advertencia emitida mediante {playback.source}.",
+                    )
+                else:
+                    system_state.add_log(
+                        "ERROR",
+                        "[AUDIO] No se pudo emitir la advertencia; el evento se guardará igualmente.",
+                    )
+
+            self._metrics.record_event_outcome(
+                decision=decision,
+                openai_used=event.openai_used,
+                local_confirmed=local_confirmed,
+                autonomous=not is_manual,
+            )
+            scene = self.current_scene
+            performance = self._metrics.snapshot(
+                active_tracks=scene.active_tracks,
+                active_persons=len(scene.persons),
+                active_objects=len(scene.objects),
+                pose_active=sum(person.pose is not None for person in scene.persons.values()),
+                suspicious_candidates=len(scene.event_candidates),
+            )
+            total_latency_ms = (time.perf_counter() - event_processing_started) * 1000.0
+            frames_sent = len(jpeg_frames) if event.openai_used else 0
+            payload_bytes = sum(len(frame) for frame in jpeg_frames) if event.openai_used else 0
+            event.metrics.update(
+                {
+                    "frames_sent": frames_sent,
+                    "payload_bytes": payload_bytes,
+                    "openai_latency_ms": (ai_latency or 0.0) * 1000.0,
+                    "tts_latency_ms": tts_latency_ms,
+                    "total_latency_ms": total_latency_ms,
+                    "local_decision_ratio": performance.local_decision_ratio,
+                    "openai_fallback_ratio": performance.openai_fallback_ratio,
+                }
+            )
+            self._metrics.record_event_metrics(
+                SystemMetrics(
+                    event_id=event.id,
+                    camera_id=event.camera_id,
+                    frames_captured=len(jpeg_frames),
+                    frames_sent=frames_sent,
+                    image_resolution=f"{settings.CAMERA_WIDTH}x{settings.CAMERA_HEIGHT}",
+                    jpeg_quality=event.capture.jpeg_quality,
+                    payload_bytes=payload_bytes,
+                    local_detection_confidence=event.local_detection.max_confidence,
+                    ai_confidence=event.openai_confidence,
+                    ai_model=settings.OPENAI_VISION_MODEL,
+                    ai_latency_ms=(ai_latency or 0.0) * 1000.0,
+                    tts_latency_ms=tts_latency_ms,
+                    total_latency_ms=total_latency_ms,
+                    decision=decision,
+                )
+            )
+            system_state.set_performance(performance.model_dump(mode="json"))
 
             # 10. Completar y guardar evento
             if is_manual:

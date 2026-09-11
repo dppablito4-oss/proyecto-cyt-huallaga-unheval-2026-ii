@@ -30,3 +30,23 @@ def test_frame_buffer_selects_only_frames_after_detection_at_intervals():
     selected = buffer.get_frames_at_intervals(start, interval_seconds=1, count=5)
 
     assert [frame for _, frame in selected] == ["frame_1", "frame_2", "frame_3", "frame_4", "frame_5"]
+
+
+def test_frame_buffer_supports_nearest_range_and_context_queries():
+    buffer = FrameBuffer(buffer_seconds=10, fps=100)
+    center = datetime.now()
+    for second in range(-2, 3):
+        buffer.add_frame(f"frame_{second}", timestamp=center + timedelta(seconds=second))
+        buffer._last_sample_time = None
+
+    nearest = buffer.get_nearest_frame(center + timedelta(seconds=0.4))
+    interval = buffer.get_frames_between(
+        center - timedelta(seconds=1),
+        center + timedelta(seconds=1),
+    )
+    context = buffer.get_context(center, before=1, after=1)
+
+    assert nearest[1] == "frame_0"
+    assert [frame for _, frame in interval] == ["frame_-1", "frame_0", "frame_1"]
+    assert context == interval
+    assert buffer.get_nearest_frame(center + timedelta(seconds=10), max_delta_seconds=1) is None

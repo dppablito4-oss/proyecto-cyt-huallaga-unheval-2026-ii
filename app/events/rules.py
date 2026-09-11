@@ -28,6 +28,8 @@ Niveles de decisión:
 """
 
 from app.models.analysis import AIAnalysisResult
+from app.models.event import EventModel
+from app.models.reasoning import EventCandidate
 
 
 class DecisionEngine:
@@ -36,12 +38,42 @@ class DecisionEngine:
     La IA nunca controla directamente el altavoz; DecisionEngine toma la decisión final.
     """
 
-    def __init__(self, warning_threshold: float = 0.80):
+    def __init__(
+        self,
+        warning_threshold: float = 0.80,
+        local_ignore_threshold: float = 0.35,
+        local_confirm_threshold: float = 0.75,
+    ):
         """
         Args:
             warning_threshold (float): Umbral mínimo de confianza (por defecto 0.80).
         """
         self.warning_threshold = warning_threshold
+        if not 0 <= local_ignore_threshold < local_confirm_threshold <= 1:
+            raise ValueError("Los umbrales locales deben cumplir 0 <= ignore < confirm <= 1.")
+        self.local_ignore_threshold = float(local_ignore_threshold)
+        self.local_confirm_threshold = float(local_confirm_threshold)
+
+    def evaluate(
+        self,
+        local_event: EventCandidate | EventModel,
+        ai_result: AIAnalysisResult | None = None,
+    ) -> str:
+        """Combina decisión local determinista con verificación externa opcional."""
+        if isinstance(local_event, EventCandidate):
+            local_score = local_event.score
+            local_state = local_event.state.value
+        else:
+            local_score = local_event.local_event_score or 0.0
+            local_state = local_event.local_event_state or "IGNORE"
+
+        if local_state == "CONFIRMED" and local_score >= self.local_confirm_threshold:
+            return "WARN"
+        if local_score < self.local_ignore_threshold:
+            return "IGNORE"
+        if ai_result is None:
+            return "LOG_ONLY"
+        return self.evaluate_decision(ai_result)
 
     def evaluate_decision(self, ai_result: AIAnalysisResult) -> str:
         """

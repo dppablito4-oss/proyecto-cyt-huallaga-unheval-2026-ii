@@ -24,6 +24,9 @@ class PoseAnalyzer(Protocol):
     @property
     def available(self) -> bool: ...
 
+    @property
+    def last_inference_count(self) -> int: ...
+
     def update(
         self,
         frame: np.ndarray,
@@ -38,6 +41,7 @@ class NullPoseAnalyzer:
     """Implementación segura usada cuando pose está desactivada."""
 
     available = False
+    last_inference_count = 0
 
     def update(
         self,
@@ -95,6 +99,8 @@ class MediaPipePoseAnalyzer:
         self._mediapipe = None
         self._landmarker = None
         self._initialization_attempted = False
+        self._runtime_failure_logged = False
+        self.last_inference_count = 0
         self._last_attempt: dict[int, datetime] = {}
         self._cache: dict[int, PoseState] = {}
 
@@ -108,6 +114,7 @@ class MediaPipePoseAnalyzer:
         scene: SceneState,
         force_track_ids: set[int] | None = None,
     ) -> dict[int, PoseState]:
+        self.last_inference_count = 0
         if frame is None or frame.size == 0:
             return {}
 
@@ -132,6 +139,7 @@ class MediaPipePoseAnalyzer:
             if not self._is_due(person.track_id, scene.timestamp):
                 continue
             self._last_attempt[person.track_id] = scene.timestamp
+            self.last_inference_count += 1
             pose = self._analyze_person(frame, person, scene.timestamp)
             if pose is not None:
                 self._cache[person.track_id] = pose
@@ -240,8 +248,10 @@ class MediaPipePoseAnalyzer:
                 data=np.ascontiguousarray(rgb),
             )
             result = self._landmarker.detect(image)
-        except (RuntimeError, ValueError, cv2.error) as exc:
-            logger.warning("MediaPipe Pose falló para track #%s: %s", person.track_id, exc)
+        except Exception as exc:
+            if not self._runtime_failure_logged:
+                logger.warning("MediaPipe Pose falló; se continuará sin pose: %s", exc)
+                self._runtime_failure_logged = True
             return None
         if not result.pose_landmarks:
             return None
@@ -302,6 +312,8 @@ class MediaPipePoseAnalyzer:
         self._mediapipe = None
         self._landmarker = None
         self._initialization_attempted = False
+        self._runtime_failure_logged = False
+        self.last_inference_count = 0
         self._last_attempt.clear()
         self._cache.clear()
 

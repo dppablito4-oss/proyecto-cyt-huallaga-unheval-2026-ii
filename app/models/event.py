@@ -45,7 +45,7 @@ class LocalDetection(BaseModel):
 class LocalDetectionSummary(BaseModel):
     """
     Resumen consolidado de todas las detecciones encontradas en un cuadro específico.
-    Utilizado por `app.events.manager.EventManager.should_trigger_event()` para decidir si iniciar un evento.
+    Se conserva como metadata compatible; ya no dispara eventos por presencia.
     """
     persons: int = Field(0, description="Cantidad total de personas identificadas en el encuadre.")
     max_confidence: float = Field(0.0, description="Máxima confianza encontrada entre todas las personas detectadas.")
@@ -75,6 +75,24 @@ class EventModel(BaseModel):
     
     # Resumen de detección económica inicial (YOLO)
     local_detection: LocalDetectionSummary = Field(default_factory=LocalDetectionSummary)
+
+    # Evidencia local espacio-temporal (SIVARH v2). Los campos son opcionales
+    # para seguir leyendo eventos históricos creados por el flujo anterior.
+    candidate_id: Optional[str] = None
+    person_track_id: Optional[int] = Field(None, ge=0)
+    object_track_id: Optional[int] = Field(None, ge=0)
+    object_class: Optional[str] = None
+    local_event_score: Optional[float] = Field(None, ge=0.0, le=1.0)
+    local_event_state: Optional[str] = None
+    release_detected: bool = False
+    release_timestamp: Optional[datetime] = None
+    release_zone: Optional[str] = None
+    object_stationary: bool = False
+    person_moving_away: bool = False
+    event_trace: Dict[str, Any] = Field(default_factory=dict)
+    openai_used: bool = False
+    openai_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    final_decision: Optional[str] = None
     
     # Metadatos de compresión y fotogramas
     capture: CaptureMetadata = Field(default_factory=CaptureMetadata)
@@ -87,3 +105,23 @@ class EventModel(BaseModel):
     
     # Métricas técnicas de latencia, red y ejecución
     metrics: Dict[str, Any] = Field(default_factory=dict, description="Métricas de rendimiento asociadas al evento.")
+
+    def openai_metadata(self) -> Dict[str, Any]:
+        """Contexto local mínimo que acompaña a los keyframes de verificación."""
+        return {
+            "candidate_id": self.candidate_id,
+            "camera_id": self.camera_id,
+            "person_track_id": self.person_track_id,
+            "object_track_id": self.object_track_id,
+            "object_class": self.object_class,
+            "local_event_score": self.local_event_score,
+            "local_event_state": self.local_event_state,
+            "release_detected": self.release_detected,
+            "release_timestamp": (
+                self.release_timestamp.isoformat() if self.release_timestamp else None
+            ),
+            "release_zone": self.release_zone,
+            "object_stationary": self.object_stationary,
+            "person_moving_away": self.person_moving_away,
+            "event_trace": self.event_trace,
+        }

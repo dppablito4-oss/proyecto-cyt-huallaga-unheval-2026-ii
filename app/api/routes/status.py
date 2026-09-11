@@ -10,6 +10,7 @@ y verificar su disponibilidad mediante sondas de salud (health checks).
 Endpoints:
 ----------
 - `GET /api/status`: Devuelve el JSON completo del estado del sistema (`SystemState`).
+- `GET /api/metrics`: Devuelve sólo el último snapshot de rendimiento y autonomía.
 - `GET /api/health`: Endpoint ligero para monitorización de disponibilidad.
 """
 
@@ -29,6 +30,12 @@ def get_system_status(state: SystemState = Depends(get_system_state)):
     - Modelo de IA configurado y métricas de procesamiento.
     """
     return state.to_dict()
+
+
+@router.get("/metrics", summary="Obtener métricas de rendimiento y autonomía")
+def get_runtime_metrics(state: SystemState = Depends(get_system_state)):
+    """Retorna el último snapshot agregado publicado por el pipeline de video."""
+    return state.to_dict()["performance"]
 
 
 @router.get("/health", summary="Comprobar salud del servicio")

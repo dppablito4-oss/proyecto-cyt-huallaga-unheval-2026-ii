@@ -63,7 +63,7 @@ SQLite + dashboard + logs
 | `app/main.py` | Inicia FastAPI, el dashboard y el worker de cámara. |
 | `app/config.py` | Lee y centraliza toda la configuración de `.env`. |
 | `app/camera/worker.py` | Orquesta captura, modo manual, IA, decisiones y audio. |
-| `app/vision/` | YOLO multiclase, ByteTrack, zonas, asociaciones, overlay, historial temporal, buffer, selección y compresión. |
+| `app/vision/` | YOLO multiclase, ByteTrack, zonas, pose selectiva, asociaciones, overlay, historial temporal, buffer, selección y compresión. |
 | `app/ai/vision_client.py` | Envía las imágenes y el prompt a OpenAI Vision. |
 | `prompts/environmental_event.txt` | Instrucciones que sigue el modelo de visión. |
 | `app/events/` | Reglas de decisión y cooldown del modo automático. |
@@ -74,6 +74,25 @@ SQLite + dashboard + logs
 | `data/` | Audios, fotogramas y base de datos creados durante ejecución. |
 | `tests/` | Pruebas unitarias. |
 | `scripts/` | Pruebas de cámara, YOLO, OpenAI y benchmarks. |
+
+## Pose corporal opcional
+
+La Fase 5 usa MediaPipe sólo como señal secundaria de asociación. Se instala y prepara con:
+
+```bash
+pip install -r requirements-pose.txt
+python scripts/download_pose_model.py
+```
+
+Activa `POSE_ENABLED=True` en `.env`. Si el paquete o el modelo no están disponibles, el pipeline sigue funcionando con caja, centroide, trayectoria y persistencia temporal.
+
+## Razonamiento temporal local
+
+La Fase 6 añade `ObjectStateMachine` y `EventEngine`. El endpoint `GET /api/scene` expone `object_states` y `event_candidates`, mientras `/api/status` resume candidatos locales y confirmados. Desde la Fase 7, con `MANUAL_RECOGNITION_MODE=False`, `EventManager` inicia el flujo sólo para candidatos `UNCERTAIN` o `CONFIRMED`; una persona detectada sin evidencia temporal no genera evento.
+
+Desde la Fase 8, un candidato `CONFIRMED` se decide localmente sin API. Un candidato `UNCERTAIN` espera el contexto posterior configurado y, si `OPENAI_FALLBACK_ENABLED=True`, envía metadata local junto con hasta `OPENAI_MAX_FRAMES` keyframes. Si la API no está disponible, el resultado seguro es `LOG_ONLY`, nunca una alerta automática por error.
+
+La Fase 9 prioriza `data/audio/templates/warning_default.wav`. `CachedWarningSpeechService` reproduce esa plantilla sin red; sólo un texto dinámico sin recurso local puede llegar a OpenAI TTS y queda cacheado por hash para no regenerarlo. La plantilla se puede reconstruir offline con `python scripts/generate_local_warning.py --overwrite`.
 
 ## Dashboard y botones
 

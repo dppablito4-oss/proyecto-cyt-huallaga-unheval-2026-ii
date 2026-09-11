@@ -46,3 +46,32 @@ class SystemMetrics(BaseModel):
     
     # Decisión adoptada por el sistema
     decision: str = Field("IGNORE", description="Decisión final tomada por el DecisionEngine ('IGNORE', 'LOG_ONLY', 'WARN').")
+
+
+class RuntimeMetricsSnapshot(BaseModel):
+    """Snapshot agregado del rendimiento y autonomía del nodo edge."""
+
+    timestamp: datetime = Field(default_factory=datetime.now)
+    capture_fps: float = Field(0.0, ge=0.0)
+    detector_fps: float = Field(0.0, ge=0.0)
+    tracker_fps: float = Field(0.0, ge=0.0)
+    pose_fps: float = Field(0.0, ge=0.0)
+    detector_latency_ms: float = Field(0.0, ge=0.0)
+    tracker_latency_ms: float = Field(0.0, ge=0.0)
+    pose_latency_ms: float = Field(0.0, ge=0.0)
+    event_engine_latency_ms: float = Field(0.0, ge=0.0)
+    openai_latency_ms: float = Field(0.0, ge=0.0)
+    cpu_percent: float = Field(0.0, ge=0.0)
+    ram_mb: float = Field(0.0, ge=0.0)
+    active_tracks: int = Field(0, ge=0)
+    active_persons: int = Field(0, ge=0)
+    active_objects: int = Field(0, ge=0)
+    pose_active: int = Field(0, ge=0)
+    events_created: int = Field(0, ge=0)
+    events_ignored: int = Field(0, ge=0)
+    events_confirmed_local: int = Field(0, ge=0)
+    events_sent_openai: int = Field(0, ge=0)
+    openai_percentage: float = Field(0.0, ge=0.0, le=100.0)
+    openai_fallback_ratio: float = Field(0.0, ge=0.0, le=1.0)
+    local_decision_ratio: float = Field(0.0, ge=0.0, le=1.0)
+    processing_level: str = "IDLE"

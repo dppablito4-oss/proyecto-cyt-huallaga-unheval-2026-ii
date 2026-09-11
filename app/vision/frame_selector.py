@@ -16,7 +16,7 @@ Flujo de invocación:
 """
 
 from typing import List, Tuple, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class FrameSelector:
@@ -61,3 +61,67 @@ class FrameSelector:
 
         # Estrategia de respaldo (tomar los primeros N)
         return frames_with_time[:self.target_frames]
+
+
+class EventKeyframeSelector:
+    """Selecciona evidencia antes, durante y después de una liberación."""
+
+    def __init__(
+        self,
+        max_frames: int = 3,
+        before_seconds: float = 1.0,
+        after_seconds: float = 1.0,
+    ):
+        if not 2 <= max_frames <= 4:
+            raise ValueError("max_frames debe estar entre 2 y 4.")
+        if before_seconds < 0 or after_seconds < 0:
+            raise ValueError("Los intervalos de keyframes no pueden ser negativos.")
+        self.max_frames = max_frames
+        self.before_seconds = float(before_seconds)
+        self.after_seconds = float(after_seconds)
+        self._uniform_fallback = FrameSelector(target_frames=max_frames, strategy="uniform")
+
+    def select_event_frames(
+        self,
+        frames_with_time: List[Tuple[datetime, Any]],
+        release_timestamp: datetime | None,
+        stationary_timestamp: datetime | None = None,
+    ) -> List[Tuple[datetime, Any]]:
+        if not frames_with_time:
+            return []
+        if release_timestamp is None:
+            return self._uniform_fallback.select_frames(frames_with_time)
+
+        targets = [
+            release_timestamp,
+            release_timestamp - timedelta(seconds=self.before_seconds),
+            release_timestamp + timedelta(seconds=self.after_seconds),
+        ]
+        if stationary_timestamp is not None:
+            targets.append(stationary_timestamp)
+
+        selected_indexes: list[int] = []
+        for target in targets:
+            nearest_index = min(
+                range(len(frames_with_time)),
+                key=lambda index: abs(
+                    (frames_with_time[index][0] - target).total_seconds()
+                ),
+            )
+            if nearest_index not in selected_indexes:
+                selected_indexes.append(nearest_index)
+            if len(selected_indexes) == self.max_frames:
+                break
+
+        if len(selected_indexes) < self.max_frames:
+            for item in self._uniform_fallback.select_frames(frames_with_time):
+                index = next(
+                    idx
+                    for idx, candidate in enumerate(frames_with_time)
+                    if candidate[0] == item[0]
+                )
+                if index not in selected_indexes:
+                    selected_indexes.append(index)
+                if len(selected_indexes) == self.max_frames:
+                    break
+        return [frames_with_time[index] for index in sorted(selected_indexes)]

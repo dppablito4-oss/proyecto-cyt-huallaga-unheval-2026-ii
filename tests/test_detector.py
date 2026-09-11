@@ -56,6 +56,7 @@ def test_detector_returns_configured_classes_with_ids_and_centroids():
     assert result.counts_by_label == {"person": 1, "bottle": 1}
     assert model.calls[0]["classes"] == [0, 39, 41]
     assert model.calls[0]["conf"] == 0.4
+    assert model.calls[0]["imgsz"] == 640
 
 
 def test_detector_legacy_summary_contains_only_people():
@@ -89,3 +90,5 @@ def test_detector_validates_threshold_and_requires_classes():
         LocalDetector(confidence_threshold=1.1)
     with pytest.raises(ValueError, match="al menos una clase"):
         LocalDetector(monitored_classes=())
+    with pytest.raises(ValueError, match="al menos 160"):
+        LocalDetector(image_size=128)

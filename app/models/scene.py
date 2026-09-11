@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.models.association import PersonObjectAssociation
 from app.models.pose import PoseState
+from app.models.reasoning import EventCandidate, ObjectStateSnapshot
 from app.models.tracking import TrackState
 
 
@@ -45,6 +46,8 @@ class SceneState(BaseModel):
     objects: dict[int, TrackState] = Field(default_factory=dict)
     zones: dict[str, ZoneState] = Field(default_factory=dict)
     associations: list[PersonObjectAssociation] = Field(default_factory=list)
+    object_states: dict[int, ObjectStateSnapshot] = Field(default_factory=dict)
+    event_candidates: list[EventCandidate] = Field(default_factory=list)
 
     def update(
         self,
@@ -70,6 +73,8 @@ class SceneState(BaseModel):
             for name, state in zones.items()
         }
         self.associations = []
+        self.object_states = {}
+        self.event_candidates = []
 
     def set_associations(self, associations: list[PersonObjectAssociation]) -> None:
         self.associations = [item.model_copy(deep=True) for item in associations]
@@ -79,6 +84,17 @@ class SceneState(BaseModel):
         for track_id, person in self.persons.items():
             pose = poses.get(track_id)
             person.pose = pose.model_copy(deep=True) if pose is not None else None
+
+    def set_reasoning(
+        self,
+        object_states: dict[int, ObjectStateSnapshot],
+        event_candidates: list[EventCandidate],
+    ) -> None:
+        self.object_states = {
+            track_id: state.model_copy(deep=True)
+            for track_id, state in object_states.items()
+        }
+        self.event_candidates = [candidate.model_copy(deep=True) for candidate in event_candidates]
 
     def association_for_object(self, track_id: int) -> Optional[PersonObjectAssociation]:
         return next(

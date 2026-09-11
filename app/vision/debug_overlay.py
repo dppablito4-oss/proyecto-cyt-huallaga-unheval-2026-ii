@@ -75,6 +75,9 @@ class VisionDebugOverlay:
                     f" | P#{association.person_track_id} "
                     f"{association.association_score:.2f} {status}"
                 )
+            object_state = scene.object_states.get(track.track_id)
+            if object_state is not None:
+                label += f" | {object_state.state.value}"
             labels.append(label)
         annotated = label_annotator.annotate(
             scene=annotated,

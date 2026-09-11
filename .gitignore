@@ -20,6 +20,8 @@ data/frames/*
 !data/frames/.gitkeep
 data/audio/*
 !data/audio/.gitkeep
+!data/audio/templates/
+!data/audio/templates/*.wav
 data/test_videos/*
 !data/test_videos/.gitkeep
 

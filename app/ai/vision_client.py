@@ -19,8 +19,9 @@ Flujo de invocación:
 """
 
 import base64
+import json
 import logging
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from app.config import settings
 from app.models.analysis import AIAnalysisResult
 from app.ai.prompts import load_system_prompt
@@ -44,6 +45,11 @@ class VisionAIClient:
         self.model = model or settings.OPENAI_VISION_MODEL
         self.client = None
         self._initialized = False
+        self.last_call_used_api = False
+
+    @property
+    def available(self) -> bool:
+        return self._initialized and self.client is not None
 
     def initialize(self) -> bool:
         """
@@ -69,7 +75,11 @@ class VisionAIClient:
         b64 = base64.b64encode(image_bytes).decode('utf-8')
         return f"data:image/jpeg;base64,{b64}"
 
-    def analyze_sequence(self, images: List[Union[bytes, str]]) -> AIAnalysisResult:
+    def analyze_sequence(
+        self,
+        images: List[Union[bytes, str]],
+        event_metadata: Optional[Dict[str, Any]] = None,
+    ) -> AIAnalysisResult:
         """
         Serializa las imágenes y envía la secuencia a OpenAI Vision para análisis temporal.
 
@@ -79,6 +89,7 @@ class VisionAIClient:
         Returns:
             AIAnalysisResult: Objeto Pydantic con la clasificación estructurada.
         """
+        self.last_call_used_api = False
         # Modo simulación seguro para arranques sin API Key (Fase 0)
         if not self._initialized or not self.client:
             logger.info("Retornando resultado simulado (mock) de VisionAIClient por falta de API Key.")
@@ -97,7 +108,22 @@ class VisionAIClient:
 
         # Construir el payload de mensajes convirtiendo a Base64 Data URL si vienen en bytes
         image_detail = settings.IMAGE_DETAIL  # 'low', 'auto' o 'high'
-        content = [{"type": "text", "text": "Analiza la siguiente secuencia cronológica de fotogramas:"}]
+        metadata_json = json.dumps(
+            event_metadata or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            default=str,
+        )
+        content = [
+            {
+                "type": "text",
+                "text": (
+                    "Verifica la siguiente hipótesis local usando los fotogramas en orden "
+                    "cronológico. La metadata es evidencia auxiliar calculada y puede contener "
+                    f"errores; no la trates como verdad confirmada. Metadata: {metadata_json}"
+                ),
+            }
+        ]
 
         for item in images:
             if isinstance(item, bytes):
@@ -114,6 +140,7 @@ class VisionAIClient:
             })
 
         try:
+            self.last_call_used_api = True
             # Respuestas estructuradas nativas de OpenAI con validación Pydantic
             # (No enviamos temperature fija para compatibilidad con modelos como gpt-5.6-luna que solo aceptan default)
             response = self.client.beta.chat.completions.parse(

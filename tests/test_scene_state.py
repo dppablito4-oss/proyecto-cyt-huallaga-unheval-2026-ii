@@ -4,6 +4,13 @@ from app.models.event import BoundingBox
 from app.models.association import AssociationSignals, PersonObjectAssociation
 from app.models.scene import SceneState, ZoneState
 from app.models.pose import PosePoint, PoseState
+from app.models.reasoning import (
+    EventCandidate,
+    EventCandidateState,
+    EventEvidence,
+    ObjectLifecycleState,
+    ObjectStateSnapshot,
+)
 from app.models.tracking import Point, TrackState
 
 
@@ -93,3 +100,45 @@ def test_scene_state_attaches_only_current_person_poses():
 
     assert scene.persons[1].pose == pose
     assert 99 not in scene.persons
+
+
+def test_scene_state_exposes_local_reasoning_without_aliasing_inputs():
+    timestamp = datetime(2026, 9, 10, 12, 0, 0)
+    object_state = ObjectStateSnapshot(
+        object_track_id=2,
+        object_class="bottle",
+        state=ObjectLifecycleState.RELEASED,
+        object_was_carried=True,
+        release_detected=True,
+        release_timestamp=timestamp,
+        last_seen=timestamp,
+        updated_at=timestamp,
+    )
+    evidence = EventEvidence(
+        person_present=True,
+        object_present=True,
+        object_was_carried=True,
+        release_detected=True,
+        object_stationary=False,
+        person_moving_away=False,
+    )
+    candidate = EventCandidate(
+        id="candidate-1",
+        camera_id="CAM_TEST",
+        person_track_id=1,
+        object_track_id=2,
+        object_class="bottle",
+        event_type="OBJECT_RELEASE_CANDIDATE",
+        score=0.5,
+        state=EventCandidateState.UNCERTAIN,
+        evidence=evidence,
+        started_at=timestamp,
+        updated_at=timestamp,
+    )
+    scene = SceneState(camera_id="CAM_TEST", timestamp=timestamp)
+
+    scene.set_reasoning({2: object_state}, [candidate])
+    candidate.score = 0.1
+
+    assert scene.object_states[2].state is ObjectLifecycleState.RELEASED
+    assert scene.event_candidates[0].score == 0.5

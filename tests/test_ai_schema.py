@@ -4,6 +4,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from app.models.analysis import AIAnalysisResult
 from app.events.rules import DecisionEngine
+from app.models.event import EventModel
 
 
 def test_ai_analysis_schema_valid():
@@ -60,6 +61,21 @@ def test_ai_analysis_schema_valid():
         warning_message=None
     )
     assert engine.evaluate_decision(no_event) == "IGNORE"
+
+    # 5. La evidencia local clara no necesita OpenAI; la ambigua sí puede combinarse.
+    local_confirmed = EventModel(
+        id="local-confirmed",
+        local_event_score=0.9,
+        local_event_state="CONFIRMED",
+    )
+    local_uncertain = EventModel(
+        id="local-uncertain",
+        local_event_score=0.6,
+        local_event_state="UNCERTAIN",
+    )
+    assert engine.evaluate(local_confirmed, ai_result=None) == "WARN"
+    assert engine.evaluate(local_uncertain, ai_result=None) == "LOG_ONLY"
+    assert engine.evaluate(local_uncertain, ai_result=waste_result) == "WARN"
 
     print("test_ai_analysis_schema_valid PASSED")
 
