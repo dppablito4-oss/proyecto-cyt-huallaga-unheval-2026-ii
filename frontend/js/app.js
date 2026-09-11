@@ -141,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const alertVoiceSummary = document.getElementById('alert-modal-voice-summary');
   const alertEmissionStatus = document.getElementById('alert-emission-status');
   const updateAlertVoiceSummary = () => {
-    if (alertVoiceSummary) alertVoiceSummary.textContent = `Voz: ${speechVoice?.value || 'onyx'} · Velocidad: ${Number(speechSpeed?.value || 1.1).toFixed(2)}x`;
+    if (alertVoiceSummary) alertVoiceSummary.textContent = `Voz sintética OpenAI TTS: ${speechVoice?.value || 'onyx'} · Velocidad: ${Number(speechSpeed?.value || 1.1).toFixed(2)}x`;
   };
   speechVoice?.addEventListener('change', updateAlertVoiceSummary);
   speechSpeed?.addEventListener('input', updateAlertVoiceSummary);

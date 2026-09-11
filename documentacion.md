@@ -13,7 +13,7 @@
 
 **SIVARH** es un sistema inteligente de monitoreo y disuasión ambiental diseñado para operar en el borde (*Edge Computing*) en zonas críticas de las riberas del río Huallaga. Su objetivo fundamental es la **intervención preventiva pre-impacto**: detectar conductas de arrojo deliberado o negligente de residuos sólidos (*littering*) y emitir un estímulo auditivo disuasorio (*nudge* cognitivo) en tiempo real para provocar el desistimiento del infractor antes de que el desecho alcance el agua o la faja marginal.
 
-A diferencia de las cámaras de seguridad convencionales o los detectores pasivos, SIVARH integra visión local de vocabulario abierto (YOLOE-26n + ByteTrack + pose + zonificación), un motor espacio-temporal que reconoce transporte, liberación, lanzamiento y abandono, y una advertencia WAV local. OpenAI Vision y TTS quedan como respaldo para evidencia ambigua o mensajes dinámicos, no como requisito de operación.
+A diferencia de las cámaras de seguridad convencionales o los detectores pasivos, SIVARH integra visión local de vocabulario abierto (YOLOE-26n + ByteTrack + pose + zonificación), un motor espacio-temporal que reconoce transporte, liberación, lanzamiento y abandono, y un subsistema OpenAI TTS híbrido. Los casos confirmados usan un catálogo WAV pre-generado para respuesta inmediata; los mensajes contextuales se sintetizan por API, se cachean y recurren al catálogo si falla la conexión.
 
 ---
 
@@ -70,7 +70,7 @@ Para superar estas fallas estructurales, SIVARH evolucionó hacia una solución 
    - Manipular un objeto (observación).
    - Soltar, abandonar o arrojar un residuo (infracción confirmada).
 10. **Motor de Decisión Gradual (`DecisionEngine`):** Clasificación en tres categorías operativas: `IGNORE`, `LOG_ONLY` y `WARN`.
-11. **Disuasión Auditiva Local (`CachedWarningSpeechService` + `AudioOutput`):** Emisión inmediata de una plantilla WAV sin Internet; el TTS remoto sólo respalda mensajes dinámicos.
+11. **Disuasión Auditiva OpenAI (`CachedWarningSpeechService` + `AudioOutput`):** Rotación inmediata de cuatro WAV pre-generados con OpenAI TTS. Si Vision propone un mensaje específico, el sistema usa TTS por API y guarda el resultado en caché; ante un fallo remoto vuelve al catálogo.
 12. **Doble Modo Operativo en Dashboard:**
     - *Modo Autónomo:* Monitoreo continuo desatendido con cooldown anti-saturación de 20 segundos.
     - *Modo Manual de Campo:* Herramienta controlada para calibración in situ, donde el operador dispara ráfagas de 4 capturas a intervalos fijos de 1.5s y valida la respuesta del modelo VLM.
@@ -161,7 +161,7 @@ SIVARH está construido bajo el principio de **separación estricta de responsab
                         ├── WARN ─────────────────────────┐
                         ▼                                 ▼
               CachedWarningSpeech                  AudioOutput
-               (WAV local primero)                (Altavoz Local)
+          (TTS dinámico/caché/catálogo)           (Altavoz Local)
                         │
                         ▼
                  Database (SQLite)
@@ -198,7 +198,8 @@ SIVARH está construido bajo el principio de **separación estricta de responsab
 | **Compresión** | [`app/vision/image_processor.py`](app/vision/image_processor.py) | Reescalado a resolución óptima, compresión JPEG al 70% y serialización Base64. |
 | **Cliente VLM** | [`app/ai/vision_client.py`](app/ai/vision_client.py) | Envío de secuencias a OpenAI Vision (GPT-5.6 Luna) y parseo estricto del esquema JSON. |
 | **Motor de Decisión** | [`app/events/decision_engine.py`](app/events/decision_engine.py) | Reglas de negocio para clasificar en `IGNORE`, `LOG_ONLY` o `WARN` según umbrales de confianza. |
-| **Síntesis de Voz** | [`app/speech/tts_service.py`](app/speech/tts_service.py) | Generación de audio mediante OpenAI TTS con soporte de streaming PCM de baja latencia. |
+| **Síntesis de Voz** | [`app/speech/openai_tts.py`](app/speech/openai_tts.py) | OpenAI TTS dinámico en PCM y generación WAV; normaliza la cabecera de archivos recibidos por streaming. |
+| **Catálogo de Voz** | [`app/speech/cached_warning.py`](app/speech/cached_warning.py) | Caché por contenido, rotación de advertencias OpenAI pre-generadas y fallback local de emergencia. |
 | **Reproducción Local** | [`app/speech/audio_output.py`](app/speech/audio_output.py) | Emisión física del audio a través de los altavoces de la estación de borde. |
 | **Almacenamiento** | [`app/storage/database.py`](app/storage/database.py) | Base de datos SQLite para auditoría forense de eventos, imágenes clave y decisiones. |
 | **Dashboard Frontend** | [`frontend/`](frontend/) | Interfaz gráfica web moderna con streaming en vivo, métricas, controles y visualizador de secuencias. |
@@ -248,6 +249,7 @@ La transición del resultado a una acción física sigue una lógica rigurosa:
 | `POST` | `/api/system/manual/start-recognition` | Inicia la ráfaga de 4 capturas automáticas espaciadas por 1.5s. |
 | `POST` | `/api/system/manual/send-images` | Envía la secuencia capturada a OpenAI Vision para su análisis y decisión. |
 | `POST` | `/api/debug/test-speech` | Prueba la síntesis de voz OpenAI TTS y la reproducción por el altavoz. |
+| `POST` | `/api/debug/test-local-warning` | Reproduce el siguiente WAV del catálogo OpenAI sin una llamada remota en ese instante. |
 | `POST` | `/api/debug/test-vision` | Prueba el cliente multimodal con una imagen estática de prueba. |
 
 ### 6.3. Comunicación en Tiempo Real
@@ -273,6 +275,8 @@ OPENAI_TTS_VOICE=onyx
 OPENAI_TTS_SPEED=1.1
 OPENAI_TTS_RESPONSE_FORMAT=pcm
 OPENAI_TTS_STREAM_BUFFER_MS=400
+OPENAI_WARNING_CATALOG_DIR=data/audio/templates
+OPENAI_WARNING_CATALOG_PATTERN=openai_warning_*.wav
 
 # Parámetros de Cámara y Video
 CAMERA_SOURCE=0
@@ -343,7 +347,9 @@ El sistema cuenta con una exhaustiva suite de pruebas automatizadas con **pytest
 - **`test_audio_output.py`:** Pipeline de reproducción de audio.
 - **`test_runtime_config.py`:** Modificación en caliente de parámetros vía API.
 
-La suite se ejecuta con `python -m pytest -q` e incluye detección abierta, pérdida temporal, lanzamiento confirmado y alerta WAV local sin nube.
+La suite se ejecuta con `python -m pytest -q` e incluye detección abierta, pérdida temporal, lanzamiento confirmado, prioridad de TTS dinámico, caché y rotación del catálogo OpenAI.
+
+Las advertencias se regeneran con `python scripts/generate_openai_warning_catalog.py --overwrite`. La voz escuchada es sintética y generada por IA mediante OpenAI TTS, no corresponde a una persona humana.
 
 ---
 

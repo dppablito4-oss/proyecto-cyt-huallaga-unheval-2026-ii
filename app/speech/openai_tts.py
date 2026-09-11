@@ -17,6 +17,7 @@ Flujo de invocación:
 """
 
 import logging
+import struct
 import wave
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
@@ -110,10 +111,9 @@ class OpenAISpeechService(SpeechService):
                 output = output.with_suffix(".mp3")
             output_path = str(output)
 
-            try:
-                # Intentar con el modelo configurado (ej. gpt-4o-mini-tts / tts-1)
+            def write_model(model_name: str) -> None:
                 tts_kwargs = dict(
-                    model=self.model,
+                    model=model_name,
                     voice=self.voice,
                     input=text,
                     speed=self.speed,
@@ -121,25 +121,26 @@ class OpenAISpeechService(SpeechService):
                 )
                 # `instructions` solo es soportado por modelos como gpt-4o-mini-tts;
                 # tts-1 y tts-1-hd lo rechazan con un error de API.
-                if "mini-tts" in self.model:
+                if "mini-tts" in model_name:
                     tts_kwargs["instructions"] = ENVIRONMENTAL_WARNING_INSTRUCTIONS
-                response = client.audio.speech.create(**tts_kwargs)
+                with client.audio.speech.with_streaming_response.create(
+                    **tts_kwargs
+                ) as response:
+                    response.stream_to_file(output_path)
+
+            try:
+                # Intentar con el modelo configurado (ej. gpt-4o-mini-tts / tts-1)
+                write_model(self.model)
             except Exception as model_err:
                 # Si el modelo específico falla, fallback a 'tts-1' estándar
                 if self.model != "tts-1":
                     logger.warning(f"Fallo al invocar modelo '{self.model}': {model_err}. Intentando con fallback 'tts-1'...")
-                    response = client.audio.speech.create(
-                        model="tts-1",
-                        voice=self.voice,
-                        input=text,
-                        speed=self.speed,
-                        response_format=response_format,
-                    )
+                    write_model("tts-1")
                 else:
                     raise model_err
 
-            # Transmitir el archivo de audio directamente al disco
-            response.stream_to_file(output_path)
+            if response_format == "wav":
+                self._finalize_streamed_wav(output)
             logger.info(
                 f"Audio TTS generado exitosamente (voz={self.voice}, velocidad={self.speed}x) en: {output_path}"
             )
@@ -147,6 +148,26 @@ class OpenAISpeechService(SpeechService):
         except Exception as e:
             logger.error(f"Error al generar audio con OpenAI TTS: {e}")
             return None
+
+    @staticmethod
+    def _finalize_streamed_wav(path: Path) -> None:
+        """Sustituye los tamaños provisionales del WAV streaming por tamaños reales."""
+        file_size = path.stat().st_size
+        if file_size < 44 or file_size > 0xFFFFFFFF:
+            return
+
+        with path.open("r+b") as wav_file:
+            header = wav_file.read(min(file_size, 4096))
+            if header[:4] != b"RIFF" or header[8:12] != b"WAVE":
+                return
+            data_marker = header.find(b"data", 12)
+            if data_marker < 0 or data_marker + 8 > len(header):
+                return
+            data_start = data_marker + 8
+            wav_file.seek(4)
+            wav_file.write(struct.pack("<I", file_size - 8))
+            wav_file.seek(data_marker + 4)
+            wav_file.write(struct.pack("<I", file_size - data_start))
 
     def generate_and_play_streaming(
         self, text: str, output_path: str, audio_output: "LocalSpeakerOutput"
@@ -182,7 +203,7 @@ class OpenAISpeechService(SpeechService):
                 )
                 if "mini-tts" in self.model:
                     stream_kwargs["instructions"] = ENVIRONMENTAL_WARNING_INSTRUCTIONS
-                with client.with_streaming_response.audio.speech.create(
+                with client.audio.speech.with_streaming_response.create(
                     **stream_kwargs,
                 ) as response, wave.open(output_path, "wb") as archive:
                     archive.setnchannels(1)

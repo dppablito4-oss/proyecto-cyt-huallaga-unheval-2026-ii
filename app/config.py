@@ -87,6 +87,15 @@ class Settings(BaseModel):
             ),
         )
     )
+    OPENAI_WARNING_CATALOG_DIR: Path = Path(
+        os.getenv(
+            "OPENAI_WARNING_CATALOG_DIR",
+            str(Path(__file__).resolve().parent.parent / "data" / "audio" / "templates"),
+        )
+    )
+    OPENAI_WARNING_CATALOG_PATTERN: str = os.getenv(
+        "OPENAI_WARNING_CATALOG_PATTERN", "openai_warning_*.wav"
+    )
     TTS_CACHE_DIR: Path = Path(
         os.getenv(
             "TTS_CACHE_DIR",

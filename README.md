@@ -12,11 +12,11 @@
 
 ## Estado actual del prototipo
 
-La versión actual implementa un flujo autónomo de extremo a extremo: captura de video, detección abierta de residuos con YOLOE-26n, tracking anónimo con ByteTrack, reconocimiento local de transporte/liberación/lanzamiento/abandono, zonas poligonales, pose selectiva, fallback multimodal para casos ambiguos, alerta WAV local, persistencia y dashboard.
+La versión actual implementa un flujo autónomo de extremo a extremo: captura de video, detección abierta de residuos con YOLOE-26n, tracking anónimo con ByteTrack, reconocimiento local de transporte/liberación/lanzamiento/abandono, zonas poligonales, pose selectiva, fallback multimodal para casos ambiguos, advertencias OpenAI TTS, persistencia y dashboard.
 
 La captura permanece activa mientras el evento acumula contexto y mientras la IA o el TTS procesan el resultado. El análisis se ejecuta en un hilo independiente y se admite un solo evento activo a la vez. Para reducir el consumo de RAM, la cámara puede operar a su FPS normal, pero el buffer conserva por defecto solo **5 muestras por segundo durante 5 segundos** (máximo 25 frames antes de la selección final).
 
-Las Fases 1–10 de SIVARH v2 incorporan IDs persistentes, trayectoria acotada, `SceneState`, zonas, pose selectiva, asociación persona–objeto, razonamiento temporal y telemetría. `EventManager` ya no dispara por presencia. Un lanzamiento rápido o un abandono confirmado se resuelve en el edge; una bolsa perdida brevemente tras ser transportada crea un caso `UNCERTAIN` con contexto posterior para OpenAI. La advertencia estándar se reproduce localmente sin Internet.
+Las Fases 1–10 de SIVARH v2 incorporan IDs persistentes, trayectoria acotada, `SceneState`, zonas, pose selectiva, asociación persona–objeto, razonamiento temporal y telemetría. `EventManager` ya no dispara por presencia. Un lanzamiento rápido o un abandono confirmado se resuelve en el edge; una bolsa perdida brevemente tras ser transportada crea un caso `UNCERTAIN` con contexto posterior para OpenAI. Los eventos confirmados rotan un catálogo WAV pre-generado con OpenAI TTS; los mensajes específicos usan TTS por API, se cachean y recurren al catálogo si falla la red.
 
 ---
 
@@ -88,8 +88,8 @@ Las estrategias tradicionales basadas en campañas de limpieza periódicas son v
             IGNORE / LOG_ONLY             WARN
              (Auditar en DB)               │
                                            ▼
-                                   Plantilla WAV local
-                               (OpenAI TTS sólo fallback)
+                              OpenAI TTS dinámico/caché
+                            o catálogo WAV pre-generado
                                            │
                                            ▼
                                       AudioOutput
@@ -157,7 +157,7 @@ huallaga-ai-monitor/
 │   ├── speech/                       # Síntesis y Salida de Audio
 │   │   ├── service.py                # Interfaz abstracta SpeechService
 │   │   ├── openai_tts.py             # Generación de voz con OpenAI TTS (/v1/audio/speech)
-│   │   ├── cached_warning.py         # Plantilla/caché local con fallback TTS
+│   │   ├── cached_warning.py         # TTS dinámico, caché y catálogo WAV rotativo
 │   │   └── audio_output.py           # Reproductor en altavoces de la estación
 │   │
 │   ├── storage/                      # Persistencia de Datos
@@ -202,7 +202,7 @@ huallaga-ai-monitor/
 ├── data/                             # Datos locales y auditoría (ignorado en git)
 │   ├── events/                       # Registros de eventos
 │   ├── frames/                       # Capturas temporales
-│   ├── audio/                        # Archivos de audio generados
+│   ├── audio/                        # Caché y catálogo OpenAI TTS pre-generado
 │   └── test_videos/                  # Grabaciones de campo para testing
 │
 ├── tests/                            # Pruebas Unitarias Automatizadas
@@ -215,6 +215,7 @@ huallaga-ai-monitor/
 │   ├── test_camera.py                # Verificación de cámara
 │   ├── test_yolo.py                  # Verificación de detector YOLO
 │   ├── test_openai.py                # Verificación de cliente Vision AI
+│   ├── generate_openai_warning_catalog.py # Generación de advertencias WAV con OpenAI TTS
 │   └── benchmark_images.py           # Benchmark de compresión de imágenes
 │
 ├── .env.example                      # Plantilla de variables de entorno
@@ -254,7 +255,13 @@ python scripts/download_pose_model.py
 
 Después establece `POSE_ENABLED=True`. Sin ese extra o sin el modelo, SIVARH continúa con asociación geométrica y temporal.
 
-La plantilla de advertencia local ya se incluye en `data/audio/templates/`. Para regenerarla offline con otra frase o voz instalada:
+El repositorio incluye cuatro advertencias WAV generadas con OpenAI TTS en `data/audio/templates/`. Para regenerar el catálogo con la API configurada:
+
+```bash
+python scripts/generate_openai_warning_catalog.py --overwrite
+```
+
+`warning_default.wav` se conserva como respaldo de emergencia generado por el sistema operativo:
 
 ```bash
 python scripts/generate_local_warning.py --overwrite
@@ -273,6 +280,8 @@ OPENAI_API_KEY=sk-tu-api-key-aqui
 OPENAI_VISION_MODEL=gpt-5.6-luna
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=onyx
+OPENAI_WARNING_CATALOG_DIR=data/audio/templates
+OPENAI_WARNING_CATALOG_PATTERN=openai_warning_*.wav
 CAMERA_SOURCE=0
 DETECTOR_BACKEND=yoloe
 YOLO_MODEL=yoloe-26n-seg.pt
@@ -347,7 +356,7 @@ python scripts/benchmark_images.py
 | `GET` | `/api/config` | Consulta los parámetros de configuración no sensibles. |
 | `PATCH` | `/api/config` | Actualiza valores de configuración en memoria; algunos componentes requieren reiniciar el pipeline para aplicar el cambio. |
 | `POST` | `/api/debug/test-speech` | Prueba manual de síntesis y reproducción de voz TTS. |
-| `POST` | `/api/debug/test-local-warning` | Reproduce exactamente la alerta autónoma local, sin OpenAI. |
+| `POST` | `/api/debug/test-local-warning` | Reproduce una advertencia del catálogo OpenAI TTS sin llamar a la API en ese instante. |
 | `WS` | `/ws` | Canal WebSocket para actualizaciones en vivo del dashboard. |
 
 ---
@@ -355,6 +364,7 @@ python scripts/benchmark_images.py
 ##  Marco Ético y Protección de Datos Personales
 
 El diseño adopta principios de minimización de datos y evita deliberadamente la identificación biométrica. Un despliegue real en espacios públicos requerirá evaluación y autorización institucional conforme al marco legal peruano aplicable:
+- **Transparencia de voz:** Las advertencias son voces sintéticas generadas por IA con OpenAI TTS, no voces humanas; el dashboard lo informa expresamente.
 - **Detección conductual:** El sistema detecta presencia de personas y analiza acciones, **SIN utilizar reconocimiento facial ni intentar identificar nombres o identidades civiles**.
 - **No almacenamiento de identidades civiles:** No se registran nombres, rostros ni números de DNI.
 - **Minimización de datos:** El buffer es temporal, acotado y muestreado. Los frames no se guardan en disco por defecto; los eventos conservan resultados y metadatos para evaluación.

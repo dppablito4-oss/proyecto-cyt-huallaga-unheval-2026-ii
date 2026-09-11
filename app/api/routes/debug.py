@@ -103,10 +103,14 @@ class AnalysisTestRequest(BaseModel):
 
 @router.post("/test-local-warning", summary="Reproducir la advertencia local autónoma")
 def test_local_warning():
-    """Prueba exactamente la ruta WAV utilizada por un evento confirmado, sin OpenAI."""
+    """Prueba el catálogo pre-generado utilizado por un evento confirmado."""
     template = settings.LOCAL_WARNING_AUDIO_PATH
     if not template.is_absolute():
         template = settings.BASE_DIR / template
+    catalog_dir = settings.OPENAI_WARNING_CATALOG_DIR
+    if not catalog_dir.is_absolute():
+        catalog_dir = settings.BASE_DIR / catalog_dir
+    catalog_paths = sorted(catalog_dir.glob(settings.OPENAI_WARNING_CATALOG_PATTERN))
     cache_dir = settings.TTS_CACHE_DIR
     if not cache_dir.is_absolute():
         cache_dir = settings.BASE_DIR / cache_dir
@@ -118,6 +122,7 @@ def test_local_warning():
         tts_fallback=OpenAISpeechService(),
         use_local_audio=True,
         tts_fallback_enabled=False,
+        catalog_paths=catalog_paths,
     ).emit()
     if not playback.emitted:
         raise HTTPException(
@@ -129,6 +134,10 @@ def test_local_warning():
         "source": playback.source,
         "audio_path": playback.audio_path,
         "uses_openai": False,
+        "uses_openai_api_now": False,
+        "voice_origin": "OpenAI TTS pre-generado"
+        if playback.source == "openai_template"
+        else "sintetizador local de emergencia",
     }
 @router.post("/test-speech", summary="Ejecutar prueba de síntesis y reproducción de voz")
 def test_speech(payload: SpeechTestRequest):

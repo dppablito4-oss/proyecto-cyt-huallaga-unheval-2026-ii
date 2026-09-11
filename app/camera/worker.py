@@ -224,6 +224,10 @@ class VideoPipelineWorker:
         local_audio_path = settings.LOCAL_WARNING_AUDIO_PATH
         if not local_audio_path.is_absolute():
             local_audio_path = settings.BASE_DIR / local_audio_path
+        catalog_dir = settings.OPENAI_WARNING_CATALOG_DIR
+        if not catalog_dir.is_absolute():
+            catalog_dir = settings.BASE_DIR / catalog_dir
+        catalog_paths = sorted(catalog_dir.glob(settings.OPENAI_WARNING_CATALOG_PATTERN))
         tts_cache_dir = settings.TTS_CACHE_DIR
         if not tts_cache_dir.is_absolute():
             tts_cache_dir = settings.BASE_DIR / tts_cache_dir
@@ -235,6 +239,7 @@ class VideoPipelineWorker:
             tts_fallback=self._tts_service,
             use_local_audio=settings.USE_LOCAL_WARNING_AUDIO,
             tts_fallback_enabled=settings.OPENAI_TTS_FALLBACK_ENABLED,
+            catalog_paths=catalog_paths,
         )
         self._repository = SQLiteEventsRepository()
 

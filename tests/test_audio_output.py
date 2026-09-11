@@ -1,4 +1,5 @@
 import sys
+import wave
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -85,12 +86,32 @@ def test_generate_speech_matches_requested_file_extension(tmp_path, monkeypatch)
 
     class FakeResponse:
         def stream_to_file(self, path):
-            Path(path).write_bytes(b"RIFF-test")
+            with wave.open(str(path), "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(24000)
+                audio.writeframes(b"\x00\x00" * 240)
 
-    class FakeSpeech:
+    class FakeStreamingResponse:
+        def __init__(self, response):
+            self.response = response
+
         def create(self, **kwargs):
             requests.append(kwargs)
+            return self.response
+
+    class FakeSpeech:
+        def __init__(self):
+            self.with_streaming_response = FakeStreamingResponse(self)
+
+        def create(self, **kwargs):
+            raise AssertionError("Debe usarse la respuesta streaming oficial.")
+
+        def __enter__(self):
             return FakeResponse()
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
 
     fake_client = SimpleNamespace(audio=SimpleNamespace(speech=FakeSpeech()))
     fake_openai = SimpleNamespace(OpenAI=lambda api_key: fake_client)
@@ -102,3 +123,5 @@ def test_generate_speech_matches_requested_file_extension(tmp_path, monkeypatch)
     assert result == str(output_path)
     assert output_path.is_file()
     assert requests[0]["response_format"] == "wav"
+    with wave.open(str(output_path), "rb") as audio:
+        assert audio.getnframes() == 240

@@ -20,4 +20,6 @@ def test_local_warning_endpoint_uses_offline_template(monkeypatch):
         "source": "local_template",
         "audio_path": "warning.wav",
         "uses_openai": False,
+        "uses_openai_api_now": False,
+        "voice_origin": "sintetizador local de emergencia",
     }

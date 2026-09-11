@@ -44,6 +44,8 @@ def get_safe_config(settings: Settings = Depends(get_settings)):
         "USE_LOCAL_WARNING_AUDIO": settings.USE_LOCAL_WARNING_AUDIO,
         "OPENAI_TTS_FALLBACK_ENABLED": settings.OPENAI_TTS_FALLBACK_ENABLED,
         "LOCAL_WARNING_AUDIO_PATH": str(settings.LOCAL_WARNING_AUDIO_PATH),
+        "OPENAI_WARNING_CATALOG_DIR": str(settings.OPENAI_WARNING_CATALOG_DIR),
+        "OPENAI_WARNING_CATALOG_PATTERN": settings.OPENAI_WARNING_CATALOG_PATTERN,
         "TTS_CACHE_DIR": str(settings.TTS_CACHE_DIR),
         "CAMERA_SOURCE": settings.CAMERA_SOURCE,
         "CAMERA_ID": settings.CAMERA_ID,
