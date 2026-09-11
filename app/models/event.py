@@ -87,6 +87,7 @@ class EventModel(BaseModel):
     release_detected: bool = False
     release_timestamp: Optional[datetime] = None
     release_zone: Optional[str] = None
+    throw_detected: bool = False
     object_stationary: bool = False
     person_moving_away: bool = False
     event_trace: Dict[str, Any] = Field(default_factory=dict)
@@ -121,6 +122,7 @@ class EventModel(BaseModel):
                 self.release_timestamp.isoformat() if self.release_timestamp else None
             ),
             "release_zone": self.release_zone,
+            "throw_detected": self.throw_detected,
             "object_stationary": self.object_stationary,
             "person_moving_away": self.person_moving_away,
             "event_trace": self.event_trace,

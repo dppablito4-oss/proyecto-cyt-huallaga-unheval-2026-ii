@@ -12,11 +12,11 @@
 
 ## Estado actual del prototipo
 
-La versión actual implementa un flujo experimental de extremo a extremo: captura de video, detección local multiclase, tracking anónimo con ByteTrack, estado espacial por cámara, zonas poligonales, pose corporal selectiva opcional, análisis multimodal, decisión, síntesis de voz, persistencia local y dashboard.
+La versión actual implementa un flujo autónomo de extremo a extremo: captura de video, detección abierta de residuos con YOLOE-26n, tracking anónimo con ByteTrack, reconocimiento local de transporte/liberación/lanzamiento/abandono, zonas poligonales, pose selectiva, fallback multimodal para casos ambiguos, alerta WAV local, persistencia y dashboard.
 
 La captura permanece activa mientras el evento acumula contexto y mientras la IA o el TTS procesan el resultado. El análisis se ejecuta en un hilo independiente y se admite un solo evento activo a la vez. Para reducir el consumo de RAM, la cámara puede operar a su FPS normal, pero el buffer conserva por defecto solo **5 muestras por segundo durante 5 segundos** (máximo 25 frames antes de la selección final).
 
-Las Fases 1–9 de SIVARH v2 incorporan IDs temporales persistentes, trayectoria acotada, `SceneState`, zonas, pose selectiva, asociación persona–objeto y razonamiento temporal local. `EventManager` ya no dispara por presencia; los casos `CONFIRMED` se resuelven en el edge y sólo los `UNCERTAIN` usan OpenAI como fallback con metadata y 2–4 keyframes. Las alertas priorizan una plantilla WAV local, reutilizan una caché por contenido y reservan OpenAI TTS para mensajes dinámicos cuando no existe audio local utilizable.
+Las Fases 1–10 de SIVARH v2 incorporan IDs persistentes, trayectoria acotada, `SceneState`, zonas, pose selectiva, asociación persona–objeto, razonamiento temporal y telemetría. `EventManager` ya no dispara por presencia. Un lanzamiento rápido o un abandono confirmado se resuelve en el edge; una bolsa perdida brevemente tras ser transportada crea un caso `UNCERTAIN` con contexto posterior para OpenAI. La advertencia estándar se reproduce localmente sin Internet.
 
 ---
 
@@ -54,18 +54,20 @@ Las estrategias tradicionales basadas en campañas de limpieza periódicas son v
                                │
          ┌─────────────────────┴─────────────────────┐
          ▼                                           ▼
-   LocalDetector (YOLO)                     FrameBuffer (5s RAM)
-(¿Hay personas presentes?)            (5 muestras/s; antes y después)
+ LocalDetector (YOLOE-26n)                   FrameBuffer (5s RAM)
+(persona + bolsas + residuos)          (5 muestras/s; antes y después)
          │                                           │
          └─────────────────────┬─────────────────────┘
                                │
                                ▼
-                          EventManager
-                  (Cooldown + un evento activo)
+          ByteTrack → AssociationEngine → EventEngine
+       (CARRIED → RELEASED → THROWN / ABANDONED)
                                │
                                ▼
-                         FrameSelector
-                    (3 / 5 / 8 frames clave)
+                   DecisionEngine local
+              ┌────────────┴────────────┐
+              ▼                         ▼
+      CONFIRMED → WARN          UNCERTAIN → keyframes
                                │
                                ▼
                         ImageProcessor
@@ -73,7 +75,7 @@ Las estrategias tradicionales basadas en campañas de limpieza periódicas son v
                                │
                                ▼
                            VisionAI
-             (OpenAI Multimodal / GPT-5.6 Luna)
+                    (sólo fallback ambiguo)
                                │
                                ▼
                        AIAnalysisResult
@@ -86,8 +88,8 @@ Las estrategias tradicionales basadas en campañas de limpieza periódicas son v
             IGNORE / LOG_ONLY             WARN
              (Auditar en DB)               │
                                            ▼
-                                     SpeechService
-                              (OpenAI GPT-4o mini TTS)
+                                   Plantilla WAV local
+                               (OpenAI TTS sólo fallback)
                                            │
                                            ▼
                                       AudioOutput
@@ -258,6 +260,8 @@ La plantilla de advertencia local ya se incluye en `data/audio/templates/`. Para
 python scripts/generate_local_warning.py --overwrite
 ```
 
+El archivo pequeño `data/models/sivarh-yoloe-26n-prompts.npz` ya contiene las categorías abiertas de SIVARH. El peso `yoloe-26n-seg.pt` se descarga automáticamente la primera vez (aprox. 11 MB). Si cambias la lista de clases, vuelve a preparar los prompts con `python scripts/prepare_yoloe_detector.py`.
+
 ### 3. Variables de entorno
 Copia el archivo `.env.example` a `.env`:
 ```bash
@@ -270,9 +274,11 @@ OPENAI_VISION_MODEL=gpt-5.6-luna
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=onyx
 CAMERA_SOURCE=0
-YOLO_MODEL=yolov8n.pt
-DETECTION_CONFIDENCE=0.50
-DETECTION_CLASSES=person,bottle,cup,backpack,handbag
+DETECTOR_BACKEND=yoloe
+YOLO_MODEL=yoloe-26n-seg.pt
+YOLO_PROMPT_EMBEDDINGS_PATH=data/models/sivarh-yoloe-26n-prompts.npz
+DETECTION_CONFIDENCE=0.20
+DETECTION_CLASSES=person,plastic bag,trash bag,garbage bag,bottle,cup,food wrapper,cardboard box,backpack,handbag
 TRACKING_ENABLED=True
 TRACKER_TYPE=bytetrack
 TRACK_HISTORY_SECONDS=15
@@ -288,7 +294,10 @@ POSE_MODEL_PATH=data/models/pose_landmarker_lite.task
 POSE_FPS=7
 OPENAI_FALLBACK_ENABLED=True
 OPENAI_MAX_FRAMES=3
-EVENT_MIN_CONTEXT_SECONDS=1.0
+OBJECT_LOST_RELEASE_SECONDS=0.35
+OBJECT_THROW_MIN_SPEED_PX_S=90
+OBJECT_THROW_MIN_DISTANCE_PX=24
+EVENT_MIN_CONTEXT_SECONDS=2.2
 BUFFER_SECONDS=5
 BUFFER_FPS=5
 ```
@@ -311,13 +320,9 @@ Accede al dashboard en tu navegador:
 
 ##  Pruebas Unitarias y Diagnóstico
 
-### Pruebas de Módulos:
+### Suite completa:
 ```bash
-python tests/test_frame_selector.py
-python tests/test_image_processor.py
-python tests/test_ai_schema.py
-python tests/test_event_manager.py
-python tests/test_frame_buffer.py
+python -m pytest -q
 ```
 
 ### Scripts de Diagnóstico:
@@ -334,6 +339,7 @@ python scripts/benchmark_images.py
 | Método | Endpoint | Descripción |
 | :--- | :--- | :--- |
 | `GET` | `/api/status` | Retorna el estado operativo completo del sistema en JSON. |
+| `GET` | `/api/metrics` | Retorna FPS, CPU, RAM, latencias y proporción de fallback OpenAI. |
 | `GET` | `/api/health` | Sonda básica de salud y disponibilidad. |
 | `GET` | `/api/events` | Lista los eventos históricos registrados en SQLite. |
 | `GET` | `/api/events/{id}` | Retorna el detalle completo de un evento por su UUID. |
@@ -341,6 +347,7 @@ python scripts/benchmark_images.py
 | `GET` | `/api/config` | Consulta los parámetros de configuración no sensibles. |
 | `PATCH` | `/api/config` | Actualiza valores de configuración en memoria; algunos componentes requieren reiniciar el pipeline para aplicar el cambio. |
 | `POST` | `/api/debug/test-speech` | Prueba manual de síntesis y reproducción de voz TTS. |
+| `POST` | `/api/debug/test-local-warning` | Reproduce exactamente la alerta autónoma local, sin OpenAI. |
 | `WS` | `/ws` | Canal WebSocket para actualizaciones en vivo del dashboard. |
 
 ---
@@ -358,10 +365,8 @@ El diseño adopta principios de minimización de datos y evita deliberadamente l
 
 Estas mejoras forman parte de la hoja de ruta y **no se consideran implementadas en la versión actual**:
 
-- evaluación futura de BoT-SORT y modelos SIVARH con clases propias de residuos;
-- medir y ajustar CPU, RAM, FPS, latencias y porcentaje real de eventos enviados a IA;
-- segmentación como posible señal experimental adicional;
-- métricas completas de latencia, payload, precisión, recall y falsos positivos;
+- entrenamiento supervisado futuro sobre las clases abiertas ya operativas de YOLOE;
+- evaluación de precisión, recall y falsos positivos con videos etiquetados de campo;
 - conjunto de videos positivos y negativos etiquetados;
 - reconexión automática de cámaras RTSP/USB;
 - configuración completamente dinámica sin reiniciar componentes;

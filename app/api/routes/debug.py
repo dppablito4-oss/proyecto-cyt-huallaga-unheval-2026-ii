@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from app.speech.openai_tts import OpenAISpeechService
 from app.speech.audio_output import LocalSpeakerOutput
+from app.speech.cached_warning import CachedWarningSpeechService
 from app.vision.image_processor import ImageProcessor
 from app.ai.vision_client import VisionAI
 from app.events.rules import DecisionEngine
@@ -100,6 +101,35 @@ class AnalysisTestRequest(BaseModel):
     )
 
 
+@router.post("/test-local-warning", summary="Reproducir la advertencia local autónoma")
+def test_local_warning():
+    """Prueba exactamente la ruta WAV utilizada por un evento confirmado, sin OpenAI."""
+    template = settings.LOCAL_WARNING_AUDIO_PATH
+    if not template.is_absolute():
+        template = settings.BASE_DIR / template
+    cache_dir = settings.TTS_CACHE_DIR
+    if not cache_dir.is_absolute():
+        cache_dir = settings.BASE_DIR / cache_dir
+    playback = CachedWarningSpeechService(
+        template_path=template,
+        cache_dir=cache_dir,
+        generic_message=settings.LOCAL_WARNING_MESSAGE,
+        audio_output=LocalSpeakerOutput(),
+        tts_fallback=OpenAISpeechService(),
+        use_local_audio=True,
+        tts_fallback_enabled=False,
+    ).emit()
+    if not playback.emitted:
+        raise HTTPException(
+            status_code=503,
+            detail="La plantilla local no pudo reproducirse en el dispositivo de audio.",
+        )
+    return {
+        "played_locally": True,
+        "source": playback.source,
+        "audio_path": playback.audio_path,
+        "uses_openai": False,
+    }
 @router.post("/test-speech", summary="Ejecutar prueba de síntesis y reproducción de voz")
 def test_speech(payload: SpeechTestRequest):
     """

@@ -95,3 +95,10 @@ def test_candidate_waits_for_configured_post_event_context():
     candidate.updated_at = candidate.started_at + timedelta(seconds=1)
 
     assert manager.should_trigger_event(candidate) is True
+
+
+def test_confirmed_candidate_does_not_wait_for_fallback_context():
+    manager = EventManager(cooldown_seconds=0, minimum_context_seconds=2.2)
+    candidate = make_candidate(state=EventCandidateState.CONFIRMED, score=0.9)
+
+    assert manager.should_trigger_event(candidate) is True

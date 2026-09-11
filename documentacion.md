@@ -13,7 +13,7 @@
 
 **SIVARH** es un sistema inteligente de monitoreo y disuasión ambiental diseñado para operar en el borde (*Edge Computing*) en zonas críticas de las riberas del río Huallaga. Su objetivo fundamental es la **intervención preventiva pre-impacto**: detectar conductas de arrojo deliberado o negligente de residuos sólidos (*littering*) y emitir un estímulo auditivo disuasorio (*nudge* cognitivo) en tiempo real para provocar el desistimiento del infractor antes de que el desecho alcance el agua o la faja marginal.
 
-A diferencia de las cámaras de seguridad convencionales o los detectores pasivos, SIVARH integra una arquitectura híbrida de visión artificial local (YOLOv8 + ByteTrack + estimación de pose + zonificación poligonal) y razonamiento semántico multimodal en la nube (OpenAI Vision GPT-5.6 Luna / GPT-4o) con síntesis de voz en streaming ultra-rápido (OpenAI TTS).
+A diferencia de las cámaras de seguridad convencionales o los detectores pasivos, SIVARH integra visión local de vocabulario abierto (YOLOE-26n + ByteTrack + pose + zonificación), un motor espacio-temporal que reconoce transporte, liberación, lanzamiento y abandono, y una advertencia WAV local. OpenAI Vision y TTS quedan como respaldo para evidencia ambigua o mensajes dinámicos, no como requisito de operación.
 
 ---
 
@@ -57,20 +57,20 @@ En su concepción inicial, el sistema operaba bajo un modelo ingenuo y reactivo:
 
 ### 1.2. El Sistema Actual (Fase 2: Autónomo, Espaciotemporal y Multimodal)
 Para superar estas fallas estructurales, SIVARH evolucionó hacia una solución autónoma multi-etapa:
-1. **Detección Multiclase Local:** Detección simultánea de personas y clases representativas de residuos comunes (`bottle`, `cup`, `backpack`, `handbag`).
+1. **Detección Abierta Local:** YOLOE-26n reconoce `plastic bag`, `trash bag`, `garbage bag`, `bottle`, `cup`, `food wrapper`, `cardboard box`, `backpack`, `handbag` y personas mediante prompts precalculados.
 2. **Seguimiento Multi-Objeto (ByteTrack):** Asignación de identidades temporales anónimas y estables a través del tiempo, permitiendo conocer si una persona acaba de ingresar, permanece estática o se retira.
 3. **Memoria de Trayectoria (`TrackHistory`):** Almacenamiento acotado (15 segundos) de las coordenadas de cada entidad con purga automática por TTL (Time-To-Live).
 4. **Zonificación Espacial Semántica (`ZoneManager`):** Segmentación del encuadre en zonas poligonales configurables (ej. *Zona Ribera/Peligro*, *Zona Observación*, *Zona Segura/Vía Pública*). Solo las interacciones que ocurren en o hacia la faja marginal pueden progresar.
 5. **Motor de Asociación Persona–Objeto (`AssociationEngine`):** Evaluación espaciotemporal de cercanía e interacción entre personas y objetos sospechosos.
 6. **Infraestructura de Pose Biomecánica (`pose.py`):** Detección de puntos clave de brazos y muñecas para reconocer posturas preparatorias de lanzamiento o desprendimiento.
 7. **Buffer Circular Muestreado (5 fps / 5s):** Conservación en memoria RAM de los instantes inmediatamente previos y posteriores al evento (máximo 25 fotogramas), optimizando drásticamente el consumo de RAM.
-8. **Selección Inteligente de Cuadros (`FrameSelector`):** Selección cronológica de 4 a 7 cuadros clave representativos de la secuencia de acción (antes, durante y después).
-9. **Razonamiento Multimodal Estricto (OpenAI Vision GPT-5.6 / GPT-4o):** Evaluación de la secuencia temporal completa bajo un contrato Pydantic tipado (`AIAnalysisResult`), distinguiendo explícitamente entre:
+8. **Motor Temporal Local (`ObjectStateMachine` + `EventEngine`):** Reconocimiento explicable de `CARRIED → RELEASED → MOVING/STATIONARY → THROWN/ABANDONED`, incluyendo una gracia para bolsas perdidas por desenfoque.
+9. **Razonamiento Multimodal Estricto como Fallback:** Sólo un evento `UNCERTAIN` envía metadata y keyframes a OpenAI, distinguiendo explícitamente entre:
    - Portar un objeto (permitido).
    - Manipular un objeto (observación).
    - Soltar, abandonar o arrojar un residuo (infracción confirmada).
 10. **Motor de Decisión Gradual (`DecisionEngine`):** Clasificación en tres categorías operativas: `IGNORE`, `LOG_ONLY` y `WARN`.
-11. **Disuasión Auditiva Contextual (`SpeechService` + `AudioOutput`):** Emisión instantánea por altavoz de un *nudge* disuasorio generado con voz humana sintética de alta fidelidad.
+11. **Disuasión Auditiva Local (`CachedWarningSpeechService` + `AudioOutput`):** Emisión inmediata de una plantilla WAV sin Internet; el TTS remoto sólo respalda mensajes dinámicos.
 12. **Doble Modo Operativo en Dashboard:**
     - *Modo Autónomo:* Monitoreo continuo desatendido con cooldown anti-saturación de 20 segundos.
     - *Modo Manual de Campo:* Herramienta controlada para calibración in situ, donde el operador dispara ráfagas de 4 capturas a intervalos fijos de 1.5s y valida la respuesta del modelo VLM.
@@ -127,8 +127,8 @@ SIVARH está construido bajo el principio de **separación estricta de responsab
                 │                                         │
         ┌───────┴───────────────────────┐                 │
         ▼                               ▼                 │
-    YOLOv8 Local                 ByteTrack Tracker        │
-(Personas y Objetos)          (IDs únicos temporales)     │
+   YOLOE-26n Local               ByteTrack Tracker        │
+(Personas y residuos)         (IDs únicos temporales)     │
         │                               │                 │
         └───────────────┬───────────────┘                 │
                         ▼                                 │
@@ -140,7 +140,7 @@ SIVARH está construido bajo el principio de **separación estricta de responsab
           (Relación Persona - Objeto)                     │
                         │                                 │
                         ▼                                 │
-             ¿Condición de Evento? ───────────────────────┤
+ ObjectStateMachine + EventEngine ────────────────────────┤
                         │ (Sí: Modo Auto o Manual)        │
                         ▼                                 ▼
                   FrameSelector <─────────────────────────┘
@@ -151,8 +151,8 @@ SIVARH está construido bajo el principio de **separación estricta de responsab
            (Resize 960w + JPEG 70 + B64)
                         │
                         ▼
-              OpenAI Vision Client
-          (GPT-5.6 Luna / Structured Output)
+          DecisionEngine local / OpenAI fallback
+          (CONFIRMED local; UNCERTAIN multimodal)
                         │
                         ▼
                  DecisionEngine
@@ -160,8 +160,8 @@ SIVARH está construido bajo el principio de **separación estricta de responsab
                         │
                         ├── WARN ─────────────────────────┐
                         ▼                                 ▼
-                  SpeechService                      AudioOutput
-              (OpenAI TTS en streaming)            (Altavoz Local)
+              CachedWarningSpeech                  AudioOutput
+               (WAV local primero)                (Altavoz Local)
                         │
                         ▼
                  Database (SQLite)
@@ -187,7 +187,7 @@ SIVARH está construido bajo el principio de **separación estricta de responsab
 | **Estado Global** | [`app/state.py`](app/state.py) | Instancia singleton reactiva `system_state` con observadores y notificaciones WebSocket. |
 | **Abstracción de Video** | [`app/camera/`](app/camera/) | Control de cámaras USB (`usb_camera.py`), streams IP (`rtsp_camera.py`) y archivos de prueba (`video_file.py`). |
 | **Worker del Pipeline** | [`app/camera/worker.py`](app/camera/worker.py) | Bucle principal de adquisición, despacho de frames al buffer, llamada a YOLO y control de modo manual. |
-| **Detector Local** | [`app/vision/detector.py`](app/vision/detector.py) | Inferencia con Ultralytics YOLOv8 para `person`, `bottle`, `cup`, `backpack`, `handbag`. |
+| **Detector Local** | [`app/vision/detector.py`](app/vision/detector.py) | YOLOE-26n con vocabulario abierto y embeddings locales para personas, bolsas y residuos. |
 | **Rastreo (Tracker)** | [`app/vision/tracker.py`](app/vision/tracker.py) | Adaptador de ByteTrack para asociación frame-a-frame de identidades temporales continuas. |
 | **Zonificación** | [`app/vision/zones.py`](app/vision/zones.py) | Gestor de polígonos normalizados, comprobación punto-en-polígono y cálculo de ocupación por zona. |
 | **Historial Cinemático** | [`app/vision/track_history.py`](app/vision/track_history.py) | Registro de posiciones pasadas, cálculo de velocidad y purga automática por TTL. |
@@ -280,9 +280,12 @@ CAMERA_FPS=30
 CAMERA_WIDTH=1280
 CAMERA_HEIGHT=720
 
-# Detector Local YOLOv8
-YOLO_MODEL=yolov8n.pt
-YOLO_PERSON_CONFIDENCE=0.50
+# Detector abierto YOLOE
+DETECTOR_BACKEND=yoloe
+YOLO_MODEL=yoloe-26n-seg.pt
+YOLO_PROMPT_EMBEDDINGS_PATH=data/models/sivarh-yoloe-26n-prompts.npz
+DETECTION_CONFIDENCE=0.20
+DETECTION_CLASSES=person,plastic bag,trash bag,garbage bag,bottle,cup,food wrapper,cardboard box,backpack,handbag
 
 # Buffer Temporal y Eventos
 BUFFER_SECONDS=6
@@ -340,15 +343,13 @@ El sistema cuenta con una exhaustiva suite de pruebas automatizadas con **pytest
 - **`test_audio_output.py`:** Pipeline de reproducción de audio.
 - **`test_runtime_config.py`:** Modificación en caliente de parámetros vía API.
 
-**Resultado de la suite de pruebas:** **49 pruebas ejecutadas y aprobadas (100% PASS).**
+La suite se ejecuta con `python -m pytest -q` e incluye detección abierta, pérdida temporal, lanzamiento confirmado y alerta WAV local sin nube.
 
 ---
 
-## 10. Hoja de Ruta y Próximos Pasos (Fases 5–8)
+## 10. Validación de Campo Pendiente
 
-1. **Optimización de Latencia para Despliegue en Faja Marginal:**
-   - Implementar síntesis de voz local con **Piper TTS** para reducir la latencia de audio a menos de 300 ms en caso de redes móviles lentas.
-   - Evaluación de modelos de visión locales compactos (ej. Qwen2-VL o SmolVLM) como respaldo offline.
+1. **Dataset supervisado del Huallaga:** conservar ejemplos positivos/negativos de las clases YOLOE para entrenar posteriormente un modelo cerrado de mayor precisión.
 2. **Calibración Ambiental en Terreno:**
    - Ajuste de umbrales para condiciones de baja visibilidad (crepúsculo/noche) y filtrado de movimiento de vegetación y reflejos en el caudal del río Huallaga.
 3. **Seguridad y Despliegue en Hardware de Borde:**

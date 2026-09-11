@@ -30,6 +30,9 @@ class _ObjectMemory:
     release_timestamp: Optional[datetime] = None
     release_position: Optional[Point] = None
     release_zone: Optional[str] = None
+    last_position: Optional[Point] = None
+    last_zone: Optional[str] = None
+    throw_detected: bool = False
     association_below_since: Optional[datetime] = None
     stationary_since: Optional[datetime] = None
     stationary_duration: float = 0.0
@@ -39,7 +42,7 @@ class _ObjectMemory:
 
 
 class ObjectStateMachine:
-    """Aplica transiciones explícitas sin convertir desapariciones en liberaciones."""
+    """Reconoce transporte, liberación, lanzamiento y abandono con memoria acotada."""
 
     _ALLOWED_TRANSITIONS = {
         ObjectLifecycleState.UNKNOWN: {ObjectLifecycleState.CARRIED},
@@ -71,10 +74,13 @@ class ObjectStateMachine:
         carried_seconds: float = 0.5,
         release_score: float = 0.35,
         release_grace_seconds: float = 0.3,
+        lost_release_seconds: float = 0.35,
         stationary_seconds: float = 2.0,
         stationary_max_distance_px: float = 12.0,
         moving_away_seconds: float = 1.0,
         moving_away_min_distance_px: float = 30.0,
+        throw_min_speed_px_s: float = 90.0,
+        throw_min_distance_px: float = 24.0,
         state_ttl_seconds: float = 10.0,
         relevant_zones: tuple[str, ...] = ("riverbank", "river_edge", "water"),
     ):
@@ -83,10 +89,13 @@ class ObjectStateMachine:
         if carried_seconds < 0 or release_grace_seconds < 0:
             raise ValueError("Las duraciones de asociación no pueden ser negativas.")
         positive = (
+            lost_release_seconds,
             stationary_seconds,
             stationary_max_distance_px,
             moving_away_seconds,
             moving_away_min_distance_px,
+            throw_min_speed_px_s,
+            throw_min_distance_px,
             state_ttl_seconds,
         )
         if any(value <= 0 for value in positive):
@@ -95,10 +104,13 @@ class ObjectStateMachine:
         self.carried_seconds = float(carried_seconds)
         self.release_score = float(release_score)
         self.release_grace_seconds = float(release_grace_seconds)
+        self.lost_release_seconds = float(lost_release_seconds)
         self.stationary_seconds = float(stationary_seconds)
         self.stationary_max_distance_px = float(stationary_max_distance_px)
         self.moving_away_seconds = float(moving_away_seconds)
         self.moving_away_min_distance_px = float(moving_away_min_distance_px)
+        self.throw_min_speed_px_s = float(throw_min_speed_px_s)
+        self.throw_min_distance_px = float(throw_min_distance_px)
         self.state_ttl_seconds = float(state_ttl_seconds)
         self.relevant_zones = {zone.casefold() for zone in relevant_zones}
         self._memory: dict[int, _ObjectMemory] = {}
@@ -125,7 +137,13 @@ class ObjectStateMachine:
                 self._memory[obj.track_id] = memory
             memory.object_class = obj.label
             memory.last_seen = scene.timestamp
+            memory.last_position = obj.centroid.model_copy(deep=True)
+            memory.last_zone = obj.current_zone
             self._update_visible(memory, obj, associations.get(obj.track_id), scene)
+
+        for track_id, memory in self._memory.items():
+            if track_id not in scene.objects:
+                self._update_missing(memory, scene)
 
         expired = [
             track_id
@@ -200,6 +218,7 @@ class ObjectStateMachine:
         memory.stationary_duration = 0.0
         memory.person_distance = None
         memory.person_moving_away = False
+        memory.throw_detected = False
         memory.distance_samples.clear()
         memory.association_peak = association.association_score
 
@@ -215,6 +234,39 @@ class ObjectStateMachine:
         memory.release_position = obj.centroid.model_copy(deep=True)
         memory.release_zone = obj.current_zone
         memory.association_below_since = None
+
+    def _update_missing(self, memory: _ObjectMemory, scene: SceneState) -> None:
+        """Conserva una liberación probable cuando un residuo rápido se oculta o desenfoca."""
+        memory.held_probability = 0.0
+        missing_seconds = self._seconds_between(scene.timestamp, memory.last_seen)
+        if (
+            memory.state is ObjectLifecycleState.CARRIED
+            and missing_seconds >= self.lost_release_seconds
+            and memory.last_position is not None
+        ):
+            self._transition(memory, ObjectLifecycleState.RELEASED)
+            memory.release_detected = True
+            memory.release_timestamp = scene.timestamp
+            memory.release_position = memory.last_position.model_copy(deep=True)
+            memory.release_zone = memory.last_zone
+            memory.association_below_since = None
+
+        if not memory.release_detected or memory.release_position is None:
+            return
+        person = (
+            scene.persons.get(memory.person_track_id)
+            if memory.person_track_id is not None
+            else None
+        )
+        if person is not None:
+            memory.person_distance = hypot(
+                person.centroid.x - memory.release_position.x,
+                person.centroid.y - memory.release_position.y,
+            )
+            self._record_distance(memory, scene.timestamp, memory.person_distance)
+            memory.person_moving_away = (
+                memory.person_moving_away or self._is_moving_away(memory, scene.timestamp)
+            )
 
     def _update_post_release(
         self,
@@ -258,6 +310,17 @@ class ObjectStateMachine:
                 self._transition(memory, ObjectLifecycleState.MOVING)
 
         target_zone = (obj.current_zone or memory.release_zone or "").casefold()
+        if memory.release_position is not None:
+            release_displacement = hypot(
+                obj.centroid.x - memory.release_position.x,
+                obj.centroid.y - memory.release_position.y,
+            )
+            if (
+                target_zone in self.relevant_zones
+                and release_displacement >= self.throw_min_distance_px
+                and obj.speed >= self.throw_min_speed_px_s
+            ):
+                memory.throw_detected = True
         if (
             memory.state is ObjectLifecycleState.STATIONARY
             and target_zone in self.relevant_zones
@@ -356,6 +419,7 @@ class ObjectStateMachine:
             release_timestamp=memory.release_timestamp,
             release_position=memory.release_position,
             release_zone=memory.release_zone,
+            throw_detected=memory.throw_detected,
             stationary_since=memory.stationary_since,
             stationary_duration=memory.stationary_duration,
             person_distance=memory.person_distance,

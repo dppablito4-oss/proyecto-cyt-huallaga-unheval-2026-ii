@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional, Protocol, Sequence
 
 from app.models.detection import Detection, DetectionFrame
@@ -26,11 +27,16 @@ class LocalDetector:
         self,
         model_name: str = "yolov8n.pt",
         confidence_threshold: float = 0.5,
+        person_confidence_threshold: float | None = None,
         monitored_classes: Sequence[str] = ("person",),
         image_size: int = 640,
+        backend: str = "yolo",
+        prompt_embeddings_path: Path | str | None = None,
     ):
         if not 0.0 <= confidence_threshold <= 1.0:
             raise ValueError("confidence_threshold debe estar entre 0 y 1.")
+        if person_confidence_threshold is not None and not 0.0 <= person_confidence_threshold <= 1.0:
+            raise ValueError("person_confidence_threshold debe estar entre 0 y 1.")
         if image_size < 160:
             raise ValueError("image_size debe ser al menos 160.")
         normalized = tuple(
@@ -42,10 +48,22 @@ class LocalDetector:
         )
         if not normalized:
             raise ValueError("Debe configurarse al menos una clase de detección.")
+        normalized_backend = backend.strip().casefold()
+        if normalized_backend not in {"yolo", "yoloe"}:
+            raise ValueError("backend debe ser 'yolo' o 'yoloe'.")
         self.model_name = model_name
         self.confidence_threshold = float(confidence_threshold)
+        self.person_confidence_threshold = float(
+            confidence_threshold
+            if person_confidence_threshold is None
+            else person_confidence_threshold
+        )
         self.monitored_classes = normalized
         self.image_size = int(image_size)
+        self.backend = normalized_backend
+        self.prompt_embeddings_path = (
+            Path(prompt_embeddings_path) if prompt_embeddings_path is not None else None
+        )
         self.model = None
         self._initialized = False
         self._unknown_classes_reported: tuple[str, ...] = ()
@@ -55,13 +73,20 @@ class LocalDetector:
         if self._initialized:
             return True
         try:
-            from ultralytics import YOLO
+            if self.backend == "yoloe":
+                from ultralytics import YOLOE
 
-            self.model = YOLO(self.model_name)
+                self.model = YOLOE(self.model_name)
+                self._configure_open_vocabulary()
+            else:
+                from ultralytics import YOLO
+
+                self.model = YOLO(self.model_name)
             self._initialized = True
             self._resolve_class_filter()
             logger.info(
-                "Modelo YOLO '%s' inicializado para clases: %s.",
+                "Detector %s '%s' inicializado para clases: %s.",
+                self.backend.upper(),
                 self.model_name,
                 ", ".join(self.monitored_classes),
             )
@@ -73,6 +98,31 @@ class LocalDetector:
                 exc,
             )
             return False
+
+    def _configure_open_vocabulary(self) -> None:
+        """Carga prompts precomputados; sólo los genera si el recurso aún no existe."""
+        if self.prompt_embeddings_path is not None and self.prompt_embeddings_path.is_file():
+            self.model.load_prompt_embeddings(self.prompt_embeddings_path)
+        else:
+            logger.warning(
+                "No existen embeddings YOLOE en %s; se generarán en este arranque.",
+                self.prompt_embeddings_path,
+            )
+            self.model.set_classes(list(self.monitored_classes))
+        available = {
+            str(label).casefold()
+            for label in (
+                self.model.names.values()
+                if isinstance(self.model.names, dict)
+                else self.model.names
+            )
+        }
+        missing = set(self.monitored_classes) - available
+        if missing:
+            raise ValueError(
+                "Los prompts YOLOE no corresponden a la configuración: "
+                + ", ".join(sorted(missing))
+            )
 
     def _model_class_names(self) -> dict[int, str]:
         names = getattr(self.model, "names", {}) if self.model is not None else {}
@@ -127,6 +177,13 @@ class LocalDetector:
                     if label is None:
                         continue
                     confidence = float(box.conf[0])
+                    threshold = (
+                        self.person_confidence_threshold
+                        if label.casefold() == "person"
+                        else self.confidence_threshold
+                    )
+                    if confidence < threshold:
+                        continue
                     x1, y1, x2, y2 = (float(value) for value in box.xyxy[0].tolist())
                     bbox = BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2)
                     detections.append(

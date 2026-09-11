@@ -24,6 +24,7 @@ class EventScoreWeights:
     target_zone: float = 0.20
     stationary: float = 0.15
     moving_away: float = 0.15
+    throw: float = 0.25
 
     def __post_init__(self) -> None:
         values = (
@@ -32,6 +33,7 @@ class EventScoreWeights:
             self.target_zone,
             self.stationary,
             self.moving_away,
+            self.throw,
         )
         if any(value < 0 for value in values) or sum(values) <= 0:
             raise ValueError("Los pesos de eventos deben ser no negativos y sumar más que cero.")
@@ -79,7 +81,7 @@ class EventEngine:
             current_zone = obj.current_zone if obj is not None else None
             evidence = self._build_evidence(snapshot, scene, current_zone)
             score = self._score(evidence)
-            state = self._classify(score, snapshot.state)
+            state = self._classify(score, snapshot.state, evidence)
             previous_state = self._candidate_states.get(candidate_id)
             if state is EventCandidateState.CONFIRMED and previous_state is not state:
                 confirmed.append(candidate_id)
@@ -140,6 +142,7 @@ class EventEngine:
             object_was_carried=snapshot.object_was_carried,
             release_detected=snapshot.release_detected,
             release_zone=snapshot.release_zone,
+            throw_detected=snapshot.throw_detected,
             object_stationary=snapshot.state
             in (ObjectLifecycleState.STATIONARY, ObjectLifecycleState.ABANDONED),
             stationary_duration=snapshot.stationary_duration,
@@ -161,6 +164,7 @@ class EventEngine:
             + float(target_zone in self.relevant_zones) * self.weights.target_zone
             + float(evidence.object_stationary) * self.weights.stationary
             + float(evidence.person_moving_away) * self.weights.moving_away
+            + float(evidence.throw_detected) * self.weights.throw
         )
         total = sum(
             (
@@ -169,6 +173,7 @@ class EventEngine:
                 self.weights.target_zone,
                 self.weights.stationary,
                 self.weights.moving_away,
+                self.weights.throw,
             )
         )
         return max(0.0, min(1.0, weighted_sum / total))
@@ -177,12 +182,16 @@ class EventEngine:
         self,
         score: float,
         object_state: ObjectLifecycleState,
+        evidence: EventEvidence,
     ) -> EventCandidateState:
         if score < self.ignore_threshold:
             return EventCandidateState.IGNORE
         if (
             score >= self.confirm_threshold
-            and object_state is ObjectLifecycleState.ABANDONED
+            and (
+                object_state is ObjectLifecycleState.ABANDONED
+                or evidence.throw_detected
+            )
         ):
             return EventCandidateState.CONFIRMED
         return EventCandidateState.UNCERTAIN

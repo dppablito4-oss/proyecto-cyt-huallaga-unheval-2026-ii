@@ -1,7 +1,7 @@
 fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
 opencv-python>=4.9.0
-ultralytics>=8.1.0
+ultralytics>=8.4.0
 supervision>=0.30,<0.31
 trackers>=2.6,<3
 scipy>=1.13.1

@@ -95,11 +95,17 @@ class VideoPipelineWorker:
         self._camera: Optional[CameraSource] = None
 
         # Componentes del pipeline
+        prompt_embeddings_path = settings.YOLO_PROMPT_EMBEDDINGS_PATH
+        if not prompt_embeddings_path.is_absolute():
+            prompt_embeddings_path = settings.BASE_DIR / prompt_embeddings_path
         self._detector = LocalDetector(
             model_name=settings.YOLO_MODEL,
             confidence_threshold=settings.DETECTION_CONFIDENCE,
+            person_confidence_threshold=settings.YOLO_PERSON_CONFIDENCE,
             monitored_classes=settings.DETECTION_CLASSES,
             image_size=settings.YOLO_IMGSZ,
+            backend=settings.DETECTOR_BACKEND,
+            prompt_embeddings_path=prompt_embeddings_path,
         )
         self._detection_limiter = MonotonicRateLimiter(settings.DETECTION_FPS)
         self._metrics = MetricsCollector(
@@ -178,10 +184,13 @@ class VideoPipelineWorker:
             carried_seconds=settings.OBJECT_CARRIED_SECONDS,
             release_score=settings.OBJECT_RELEASE_SCORE,
             release_grace_seconds=settings.OBJECT_RELEASE_GRACE_SECONDS,
+            lost_release_seconds=settings.OBJECT_LOST_RELEASE_SECONDS,
             stationary_seconds=settings.OBJECT_STATIONARY_SECONDS,
             stationary_max_distance_px=settings.OBJECT_STATIONARY_MAX_DISTANCE_PX,
             moving_away_seconds=settings.PERSON_MOVING_AWAY_SECONDS,
             moving_away_min_distance_px=settings.PERSON_MOVING_AWAY_MIN_DISTANCE_PX,
+            throw_min_speed_px_s=settings.OBJECT_THROW_MIN_SPEED_PX_S,
+            throw_min_distance_px=settings.OBJECT_THROW_MIN_DISTANCE_PX,
             state_ttl_seconds=settings.OBJECT_STATE_TTL_SECONDS,
             relevant_zones=settings.EVENT_RELEVANT_ZONES,
         )
@@ -196,6 +205,7 @@ class VideoPipelineWorker:
                 target_zone=settings.EVENT_TARGET_ZONE_WEIGHT,
                 stationary=settings.EVENT_STATIONARY_WEIGHT,
                 moving_away=settings.EVENT_MOVING_AWAY_WEIGHT,
+                throw=settings.EVENT_THROW_WEIGHT,
             ),
         )
         self._event_manager = EventManager(
@@ -541,7 +551,9 @@ class VideoPipelineWorker:
                 ),
             )
             for track_id in self._tracker.last_created_track_ids:
-                system_state.add_log("TRACK", f"[TRACK] Track #{track_id} creado.")
+                track = scene.persons.get(track_id) or scene.objects.get(track_id)
+                label = f" ({track.label})" if track is not None else ""
+                system_state.add_log("TRACK", f"[TRACK] Track #{track_id}{label} creado.")
             for track_id in self._tracker.last_expired_track_ids:
                 system_state.add_log("TRACK", f"[TRACK] Track #{track_id} expirado.")
             for object_id, previous, current in self._event_engine.object_state_machine.last_transitions:

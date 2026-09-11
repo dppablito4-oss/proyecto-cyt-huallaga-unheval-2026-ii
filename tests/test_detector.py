@@ -35,6 +35,21 @@ class FakeYolo:
         ]
 
 
+class FakeYoloE:
+    def __init__(self):
+        self.names = {0: "person"}
+        self.loaded = []
+        self.classes = []
+
+    def load_prompt_embeddings(self, path):
+        self.loaded.append(path)
+        self.names = {0: "person", 1: "plastic bag"}
+
+    def set_classes(self, classes):
+        self.classes = list(classes)
+        self.names = dict(enumerate(classes))
+
+
 def test_detector_returns_configured_classes_with_ids_and_centroids():
     model = FakeYolo()
     detector = LocalDetector(
@@ -73,6 +88,36 @@ def test_detector_legacy_summary_contains_only_people():
     assert summary.detections[0].label == "person"
 
 
+def test_detector_uses_stricter_threshold_for_people_than_waste():
+    class LowConfidenceYolo(FakeYolo):
+        names = {0: "person", 39: "bottle"}
+
+        def __call__(self, frame, **kwargs):
+            self.calls.append(kwargs)
+            return [
+                SimpleNamespace(
+                    boxes=[
+                        fake_box(0, 0.30, [10, 20, 50, 100]),
+                        fake_box(39, 0.25, [60, 40, 80, 90]),
+                    ]
+                )
+            ]
+
+    model = LowConfidenceYolo()
+    detector = LocalDetector(
+        confidence_threshold=0.20,
+        person_confidence_threshold=0.35,
+        monitored_classes=("person", "bottle"),
+    )
+    detector.model = model
+    detector._initialized = True
+    result = detector.detect(np.zeros((120, 160, 3)))
+
+    assert [(item.label, item.confidence) for item in result.detections] == [
+        ("bottle", pytest.approx(0.25))
+    ]
+
+
 def test_detector_ignores_configured_classes_missing_from_model():
     model = FakeYolo()
     detector = LocalDetector(monitored_classes=("generic_waste",))
@@ -92,3 +137,34 @@ def test_detector_validates_threshold_and_requires_classes():
         LocalDetector(monitored_classes=())
     with pytest.raises(ValueError, match="al menos 160"):
         LocalDetector(image_size=128)
+    with pytest.raises(ValueError, match="backend"):
+        LocalDetector(backend="unknown")
+
+
+def test_yoloe_detector_loads_precomputed_prompt_embeddings(tmp_path):
+    prompt_path = tmp_path / "prompts.npz"
+    prompt_path.touch()
+    detector = LocalDetector(
+        backend="yoloe",
+        monitored_classes=("person", "plastic bag"),
+        prompt_embeddings_path=prompt_path,
+    )
+    detector.model = FakeYoloE()
+
+    detector._configure_open_vocabulary()
+
+    assert detector.model.loaded == [prompt_path]
+    assert detector.model.classes == []
+
+
+def test_yoloe_detector_generates_prompts_when_cache_is_absent(tmp_path):
+    detector = LocalDetector(
+        backend="yoloe",
+        monitored_classes=("person", "plastic bag"),
+        prompt_embeddings_path=tmp_path / "missing.npz",
+    )
+    detector.model = FakeYoloE()
+
+    detector._configure_open_vocabulary()
+
+    assert detector.model.classes == ["person", "plastic bag"]

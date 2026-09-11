@@ -44,6 +44,7 @@ class ObjectStateSnapshot(BaseModel):
     release_timestamp: Optional[datetime] = None
     release_position: Optional[Point] = None
     release_zone: Optional[str] = None
+    throw_detected: bool = False
     stationary_since: Optional[datetime] = None
     stationary_duration: float = Field(0.0, ge=0.0)
     person_distance: Optional[float] = Field(None, ge=0.0)
@@ -60,6 +61,7 @@ class EventEvidence(BaseModel):
     object_was_carried: bool
     release_detected: bool
     release_zone: Optional[str] = None
+    throw_detected: bool = False
     object_stationary: bool
     stationary_duration: float = Field(0.0, ge=0.0)
     person_moving_away: bool

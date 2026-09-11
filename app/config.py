@@ -108,8 +108,20 @@ class Settings(BaseModel):
     # ==========================================
     # 4. Detector Local de Personas (YOLO)
     # ==========================================
-    # Utilizado por `app.vision.detector.LocalDetector` como filtro de bajo costo
-    YOLO_MODEL: str = os.getenv("YOLO_MODEL", "yolov8n.pt")
+    # `yoloe` reconoce residuos fuera de las 80 clases COCO mediante prompts locales.
+    DETECTOR_BACKEND: str = os.getenv("DETECTOR_BACKEND", "yoloe").strip().casefold()
+    YOLO_MODEL: str = os.getenv("YOLO_MODEL", "yoloe-26n-seg.pt")
+    YOLO_PROMPT_EMBEDDINGS_PATH: Path = Path(
+        os.getenv(
+            "YOLO_PROMPT_EMBEDDINGS_PATH",
+            str(
+                Path(__file__).resolve().parent.parent
+                / "data"
+                / "models"
+                / "sivarh-yoloe-26n-prompts.npz"
+            ),
+        )
+    )
     YOLO_IMGSZ: int = Field(default=int(os.getenv("YOLO_IMGSZ", "640")), ge=160)
     DETECTION_FPS: float = Field(default=float(os.getenv("DETECTION_FPS", "10")), gt=0.0)
     # Alias heredado: se conserva para instalaciones existentes.
@@ -120,7 +132,7 @@ class Settings(BaseModel):
         default=float(
             os.getenv(
                 "DETECTION_CONFIDENCE",
-                os.getenv("YOLO_PERSON_CONFIDENCE", "0.50"),
+                os.getenv("YOLO_PERSON_CONFIDENCE", "0.20"),
             )
         ),
         ge=0.0,
@@ -132,7 +144,7 @@ class Settings(BaseModel):
                 name.strip().casefold()
                 for name in os.getenv(
                     "DETECTION_CLASSES",
-                    "person,bottle,cup,backpack,handbag",
+                    "person,plastic bag,trash bag,garbage bag,bottle,cup,food wrapper,cardboard box,backpack,handbag",
                 ).split(",")
                 if name.strip()
             )
@@ -148,7 +160,7 @@ class Settings(BaseModel):
     TRACK_HISTORY_SECONDS: float = Field(default=float(os.getenv("TRACK_HISTORY_SECONDS", "15")), gt=0)
     TRACK_TTL_SECONDS: float = Field(default=float(os.getenv("TRACK_TTL_SECONDS", "5")), gt=0)
     TRACK_ACTIVATION_THRESHOLD: float = Field(
-        default=float(os.getenv("TRACK_ACTIVATION_THRESHOLD", "0.50")), ge=0.0, le=1.0
+        default=float(os.getenv("TRACK_ACTIVATION_THRESHOLD", "0.20")), ge=0.0, le=1.0
     )
     TRACK_LOST_BUFFER: int = Field(default=int(os.getenv("TRACK_LOST_BUFFER", "30")), ge=0)
     TRACK_MIN_CONSECUTIVE_FRAMES: int = Field(
@@ -275,6 +287,9 @@ class Settings(BaseModel):
     OBJECT_RELEASE_GRACE_SECONDS: float = Field(
         default=float(os.getenv("OBJECT_RELEASE_GRACE_SECONDS", "0.3")), ge=0.0
     )
+    OBJECT_LOST_RELEASE_SECONDS: float = Field(
+        default=float(os.getenv("OBJECT_LOST_RELEASE_SECONDS", "0.35")), gt=0.0
+    )
     OBJECT_STATIONARY_SECONDS: float = Field(
         default=float(os.getenv("OBJECT_STATIONARY_SECONDS", "2.0")), gt=0.0
     )
@@ -289,6 +304,12 @@ class Settings(BaseModel):
     )
     PERSON_MOVING_AWAY_MIN_DISTANCE_PX: float = Field(
         default=float(os.getenv("PERSON_MOVING_AWAY_MIN_DISTANCE_PX", "30.0")), gt=0.0
+    )
+    OBJECT_THROW_MIN_SPEED_PX_S: float = Field(
+        default=float(os.getenv("OBJECT_THROW_MIN_SPEED_PX_S", "90.0")), gt=0.0
+    )
+    OBJECT_THROW_MIN_DISTANCE_PX: float = Field(
+        default=float(os.getenv("OBJECT_THROW_MIN_DISTANCE_PX", "24.0")), gt=0.0
     )
     EVENT_RELEVANT_ZONES: tuple[str, ...] = tuple(
         dict.fromkeys(
@@ -321,6 +342,9 @@ class Settings(BaseModel):
     EVENT_MOVING_AWAY_WEIGHT: float = Field(
         default=float(os.getenv("EVENT_MOVING_AWAY_WEIGHT", "0.15")), ge=0.0
     )
+    EVENT_THROW_WEIGHT: float = Field(
+        default=float(os.getenv("EVENT_THROW_WEIGHT", "0.25")), ge=0.0
+    )
 
     # ==========================================
     # 4.6. Verificación multimodal como fallback (SIVARH v2)
@@ -332,7 +356,7 @@ class Settings(BaseModel):
         default=int(os.getenv("OPENAI_MAX_FRAMES", "3")), ge=2, le=4
     )
     EVENT_MIN_CONTEXT_SECONDS: float = Field(
-        default=float(os.getenv("EVENT_MIN_CONTEXT_SECONDS", "1.0")), ge=0.0
+        default=float(os.getenv("EVENT_MIN_CONTEXT_SECONDS", "2.2")), ge=0.0
     )
     EVENT_KEYFRAME_BEFORE_SECONDS: float = Field(
         default=float(os.getenv("EVENT_KEYFRAME_BEFORE_SECONDS", "1.0")), ge=0.0
@@ -390,6 +414,8 @@ class Settings(BaseModel):
 
     @model_validator(mode="after")
     def validate_association_weights(self):
+        if self.DETECTOR_BACKEND not in {"yolo", "yoloe"}:
+            raise ValueError("DETECTOR_BACKEND debe ser 'yolo' o 'yoloe'.")
         total = (
             self.ASSOCIATION_BBOX_WEIGHT
             + self.ASSOCIATION_CENTROID_WEIGHT
@@ -405,6 +431,7 @@ class Settings(BaseModel):
             + self.EVENT_TARGET_ZONE_WEIGHT
             + self.EVENT_STATIONARY_WEIGHT
             + self.EVENT_MOVING_AWAY_WEIGHT
+            + self.EVENT_THROW_WEIGHT
         )
         if event_weight_total <= 0:
             raise ValueError("Al menos un peso de evento debe ser mayor que cero.")

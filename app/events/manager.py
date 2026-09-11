@@ -78,8 +78,11 @@ class EventManager:
                 and candidate.id not in self._handled_candidate_ids
                 and candidate.state
                 in (EventCandidateState.UNCERTAIN, EventCandidateState.CONFIRMED)
-                and (candidate.updated_at - candidate.started_at).total_seconds()
-                >= self.minimum_context_seconds
+                and (
+                    candidate.state is EventCandidateState.CONFIRMED
+                    or (candidate.updated_at - candidate.started_at).total_seconds()
+                    >= self.minimum_context_seconds
+                )
                 and not self.cooldown_manager.is_in_cooldown()
             )
 
@@ -130,6 +133,7 @@ class EventManager:
                 release_detected=evidence.release_detected,
                 release_timestamp=evidence.timestamps.get("released_at"),
                 release_zone=evidence.release_zone,
+                throw_detected=evidence.throw_detected,
                 object_stationary=evidence.object_stationary,
                 person_moving_away=evidence.person_moving_away,
                 event_trace={
@@ -137,6 +141,7 @@ class EventManager:
                     "carried_duration": evidence.carried_duration,
                     "release_detected": evidence.release_detected,
                     "release_zone": evidence.release_zone,
+                    "throw_detected": evidence.throw_detected,
                     "stationary_duration": evidence.stationary_duration,
                     "person_moving_away": evidence.person_moving_away,
                     "person_distance": evidence.person_distance,

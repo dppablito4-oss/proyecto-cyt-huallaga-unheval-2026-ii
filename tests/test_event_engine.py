@@ -131,15 +131,21 @@ def release_object(machine: ObjectStateMachine, started: datetime) -> datetime:
     return released_at
 
 
-def test_missing_carried_object_does_not_imply_release():
+def test_missing_carried_object_uses_short_grace_before_probable_release():
     started = datetime(2026, 9, 10, 12, 0, 0)
     machine = make_machine()
     carry_object(machine, started)
 
-    states = machine.update(make_scene(started + timedelta(seconds=1), 180, None))
+    states = machine.update(make_scene(started + timedelta(seconds=0.8), 140, None))
 
     assert states[8].state is ObjectLifecycleState.CARRIED
     assert states[8].release_detected is False
+
+    states = machine.update(make_scene(started + timedelta(seconds=1.0), 180, None))
+
+    assert states[8].state is ObjectLifecycleState.RELEASED
+    assert states[8].release_detected is True
+    assert states[8].release_zone == "riverbank"
 
 
 def test_event_engine_confirms_carried_release_stationary_and_moving_away():
@@ -175,10 +181,41 @@ def test_event_engine_confirms_carried_release_stationary_and_moving_away():
     assert confirmed[0].id == initial[0].id
     assert confirmed[0].state is EventCandidateState.CONFIRMED
     assert confirmed[0].event_type == "WASTE_DISPOSAL"
-    assert confirmed[0].score == pytest.approx(1.0)
+    assert confirmed[0].score == pytest.approx(0.8)
     assert confirmed[0].evidence.object_stationary is True
     assert confirmed[0].evidence.person_moving_away is True
     assert engine.object_states[8].state is ObjectLifecycleState.ABANDONED
+
+
+def test_event_engine_confirms_fast_throw_into_relevant_zone():
+    started = datetime(2026, 9, 10, 12, 0, 0)
+    machine = make_machine(throw_min_speed_px_s=90, throw_min_distance_px=24)
+    engine = EventEngine(machine, relevant_zones=("riverbank",))
+    carried_at = started + timedelta(seconds=0.6)
+    engine.update(make_scene(carried_at, 100, 105, make_association(started, carried_at)))
+    engine.update(make_scene(started + timedelta(seconds=1.0), 150, 110))
+    released_at = started + timedelta(seconds=1.4)
+    engine.update(
+        make_scene(released_at, 170, 110, trajectory=[(released_at, 110, 100)])
+    )
+    thrown_at = started + timedelta(seconds=1.7)
+    thrown_scene = make_scene(
+        thrown_at,
+        180,
+        150,
+        trajectory=[
+            (released_at, 110, 100),
+            (thrown_at, 150, 100),
+        ],
+    )
+    thrown_scene.objects[8].speed = 133.0
+
+    candidates = engine.update(thrown_scene)
+
+    assert candidates[0].state is EventCandidateState.CONFIRMED
+    assert candidates[0].event_type == "WASTE_DISPOSAL"
+    assert candidates[0].evidence.throw_detected is True
+    assert candidates[0].score == pytest.approx(0.76)
 
 
 def test_preexisting_stationary_object_never_creates_candidate():
@@ -235,8 +272,10 @@ def test_event_engine_configuration_rejects_unsafe_thresholds():
     with pytest.raises(ValueError, match="0 <= ignore < confirm"):
         EventEngine(make_machine(), ignore_threshold=0.8, confirm_threshold=0.7)
     with pytest.raises(ValueError, match="sumar más que cero"):
-        EventScoreWeights(0, 0, 0, 0, 0)
+        EventScoreWeights(0, 0, 0, 0, 0, 0)
     with pytest.raises(ValidationError, match="LOCAL_IGNORE_THRESHOLD"):
         Settings(LOCAL_IGNORE_THRESHOLD=0.8, LOCAL_CONFIRM_THRESHOLD=0.7)
     with pytest.raises(ValidationError, match="OBJECT_RELEASE_SCORE"):
         Settings(OBJECT_RELEASE_SCORE=0.8, OBJECT_CARRIED_SCORE=0.7)
+    with pytest.raises(ValidationError, match="DETECTOR_BACKEND"):
+        Settings(DETECTOR_BACKEND="unknown")

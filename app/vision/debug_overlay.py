@@ -78,6 +78,8 @@ class VisionDebugOverlay:
             object_state = scene.object_states.get(track.track_id)
             if object_state is not None:
                 label += f" | {object_state.state.value}"
+                if object_state.throw_detected:
+                    label += " | LANZAMIENTO"
             labels.append(label)
         annotated = label_annotator.annotate(
             scene=annotated,
