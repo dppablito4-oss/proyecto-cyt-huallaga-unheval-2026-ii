@@ -62,6 +62,7 @@ def test_worker_publishes_confirmed_person_object_association():
 
     class FakePoseAnalyzer:
         available = True
+        last_inference_count = 0
 
         def update(self, frame, scene, force_track_ids=None):
             return {

@@ -491,7 +491,7 @@ class VideoPipelineWorker:
             pose_started = time.perf_counter()
             poses = self._pose_analyzer.update(frame, working_scene)
             pose_elapsed_ms = (time.perf_counter() - pose_started) * 1000.0
-            pose_inferences = self._pose_analyzer.last_inference_count
+            pose_inferences = getattr(self._pose_analyzer, "last_inference_count", 0)
             if pose_inferences:
                 self._metrics.record_stage(
                     "pose",

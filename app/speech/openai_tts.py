@@ -112,14 +112,18 @@ class OpenAISpeechService(SpeechService):
 
             try:
                 # Intentar con el modelo configurado (ej. gpt-4o-mini-tts / tts-1)
-                response = client.audio.speech.create(
+                tts_kwargs = dict(
                     model=self.model,
                     voice=self.voice,
                     input=text,
-                    instructions=ENVIRONMENTAL_WARNING_INSTRUCTIONS,
                     speed=self.speed,
                     response_format=response_format,
                 )
+                # `instructions` solo es soportado por modelos como gpt-4o-mini-tts;
+                # tts-1 y tts-1-hd lo rechazan con un error de API.
+                if "mini-tts" in self.model:
+                    tts_kwargs["instructions"] = ENVIRONMENTAL_WARNING_INSTRUCTIONS
+                response = client.audio.speech.create(**tts_kwargs)
             except Exception as model_err:
                 # Si el modelo específico falla, fallback a 'tts-1' estándar
                 if self.model != "tts-1":
@@ -168,14 +172,18 @@ class OpenAISpeechService(SpeechService):
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
             def stream_chunks():
-                with client.with_streaming_response.audio.speech.create(
+                stream_kwargs = dict(
                     model=self.model,
                     voice=self.voice,
                     input=text,
-                    instructions=ENVIRONMENTAL_WARNING_INSTRUCTIONS,
                     speed=self.speed,
                     response_format="pcm",
                     stream_format="audio",
+                )
+                if "mini-tts" in self.model:
+                    stream_kwargs["instructions"] = ENVIRONMENTAL_WARNING_INSTRUCTIONS
+                with client.with_streaming_response.audio.speech.create(
+                    **stream_kwargs,
                 ) as response, wave.open(output_path, "wb") as archive:
                     archive.setnchannels(1)
                     archive.setsampwidth(2)

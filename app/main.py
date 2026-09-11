@@ -9,7 +9,7 @@ Responsabilidad:
 - Aplicar políticas CORS para permitir comunicación segura con navegadores y clientes remotos.
 - Registrar todas las rutas de la API REST (`/api/...`) y WebSockets (`/ws`).
 - Servir los archivos estáticos del frontend (`frontend/index.html`, CSS, JS) en la raíz `/`.
-- Gestionar los eventos de ciclo de vida de la aplicación (`startup` y `shutdown`).
+- Gestionar el ciclo de vida de la aplicación mediante el gestor `lifespan`.
 - Inicializar y detener el `VideoPipelineWorker` de captura continua.
 
 Cómo ejecutar el servidor:
@@ -21,6 +21,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 
 import logging
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -43,11 +44,39 @@ logging.basicConfig(
 )
 logger = logging.getLogger("HuallagaAIMonitor")
 
+# Instancia global del worker de video, accesible desde los endpoints de control
+pipeline_worker = VideoPipelineWorker()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Gestor de ciclo de vida de la aplicación FastAPI.
+    Reemplaza los hooks on_event("startup") y on_event("shutdown") deprecados.
+    """
+    # ── Startup ──
+    logger.info("=" * 60)
+    logger.info(f"   {settings.APP_NAME} v{settings.APP_VERSION} INICIADO")
+    logger.info(f"   Entorno: {settings.APP_ENV} | Modo Debug: {settings.DEBUG}")
+    logger.info(f"   Modelo Visión: {settings.OPENAI_VISION_MODEL} | Detalle: {settings.IMAGE_DETAIL}")
+    logger.info(f"   Servidor disponible en: http://{settings.HOST}:{settings.PORT}")
+    logger.info("=" * 60)
+    # Iniciar el pipeline de captura automáticamente
+    pipeline_worker.start()
+
+    yield
+
+    # ── Shutdown ──
+    pipeline_worker.stop()
+    logger.info("Apagando SIVARH y liberando recursos...")
+
+
 # Creación de la aplicación FastAPI con metadatos descriptivos
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="SIVARH: Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga. UNHEVAL - Facultad de Ciencias de la Educación, Escuela Profesional de Matemática y Física. Curso: Ciencias Naturales y del Ambiente (2026-II)."
+    description="SIVARH: Sistema Inteligente de Vigilancia Ambiental para las Riberas del Río Huallaga. UNHEVAL - Facultad de Ciencias de la Educación, Escuela Profesional de Matemática y Física. Curso: Ciencias Naturales y del Ambiente (2026-II).",
+    lifespan=lifespan,
 )
 
 # Habilitar CORS (Cross-Origin Resource Sharing) para facilitar pruebas y desarrollo
@@ -69,35 +98,6 @@ if frontend_dir.exists():
     app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
 else:
     logger.warning(f"Directorio de frontend no encontrado en: {frontend_dir}")
-
-# Instancia global del worker de video, accesible desde los endpoints de control
-pipeline_worker = VideoPipelineWorker()
-
-
-@app.on_event("startup")
-async def startup_event():
-    """
-    Hook de arranque: Se ejecuta al iniciar el proceso uvicorn.
-    Inicializa el worker de captura de video si el modo debug no lo desactiva.
-    """
-    logger.info("=" * 60)
-    logger.info(f"   {settings.APP_NAME} v{settings.APP_VERSION} INICIADO")
-    logger.info(f"   Entorno: {settings.APP_ENV} | Modo Debug: {settings.DEBUG}")
-    logger.info(f"   Modelo Visión: {settings.OPENAI_VISION_MODEL} | Detalle: {settings.IMAGE_DETAIL}")
-    logger.info(f"   Servidor disponible en: http://{settings.HOST}:{settings.PORT}")
-    logger.info("=" * 60)
-    # Iniciar el pipeline de captura automáticamente
-    pipeline_worker.start()
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """
-    Hook de apagado: Se ejecuta al detener el servidor limpiamente (Ctrl + C / SIGTERM).
-    Detiene el worker de captura y libera recursos de cámara.
-    """
-    pipeline_worker.stop()
-    logger.info("Apagando SIVARH y liberando recursos...")
 
 
 if __name__ == "__main__":
