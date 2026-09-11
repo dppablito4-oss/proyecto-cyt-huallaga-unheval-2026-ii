@@ -32,6 +32,8 @@ data/test_videos/*
 *.pt
 *.onnx
 *.engine
+*.task
+!data/models/.gitkeep
 
 # IDE & OS files
 .vscode/

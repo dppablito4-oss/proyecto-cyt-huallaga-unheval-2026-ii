@@ -10,11 +10,11 @@
 
 ## Estado actual del prototipo
 
-La versión actual implementa un flujo experimental de extremo a extremo: captura de video, detección local de personas, tracking anónimo con ByteTrack, análisis multimodal, decisión, síntesis de voz, persistencia local y dashboard.
+La versión actual implementa un flujo experimental de extremo a extremo: captura de video, detección local multiclase, tracking anónimo con ByteTrack, estado espacial por cámara, zonas poligonales, análisis multimodal, decisión, síntesis de voz, persistencia local y dashboard.
 
 La captura permanece activa mientras el evento acumula contexto y mientras la IA o el TTS procesan el resultado. El análisis se ejecuta en un hilo independiente y se admite un solo evento activo a la vez. Para reducir el consumo de RAM, la cámara puede operar a su FPS normal, pero el buffer conserva por defecto solo **5 muestras por segundo durante 5 segundos** (máximo 25 frames antes de la selección final).
 
-La Fase 1 de SIVARH v2 incorpora IDs temporales persistentes, estado de track, trayectoria acotada y limpieza por TTL. Por compatibilidad, el disparo de eventos todavía usa la detección de presencia; cambiará a evidencia espacio-temporal en las fases posteriores. La validación científica con videos etiquetados, métricas completas, pose, segmentación y despliegue en campo sigue pendiente.
+Las Fases 1–4 de SIVARH v2 incorporan IDs temporales persistentes, trayectoria acotada, limpieza por TTL, `SceneState`, zonas configurables, overlay opcional, detección multiclase y asociación persona–objeto con consistencia temporal. Por compatibilidad, el disparo de eventos todavía usa únicamente la presencia de personas; cambiará a evidencia espacio-temporal en las fases posteriores.
 
 ---
 
@@ -109,6 +109,10 @@ huallaga-ai-monitor/
 │   │
 │   ├── models/                       # Modelos de datos y esquemas Pydantic
 │   │   ├── event.py                  # Entidad EventModel y detecciones
+│   │   ├── detection.py              # Detection y DetectionFrame multiclase
+│   │   ├── tracking.py               # TrackedObject, TrackState y trayectoria
+│   │   ├── scene.py                  # SceneState y contratos de zonas
+│   │   ├── association.py            # Señales y asociación persona-objeto
 │   │   ├── analysis.py               # Esquema estructurado AIAnalysisResult
 │   │   ├── camera.py                 # Estado técnico de cámara
 │   │   └── metrics.py                # Métricas experimentales (latencia, payload)
@@ -120,9 +124,12 @@ huallaga-ai-monitor/
 │   │   └── video_file.py             # Reproducción de grabaciones de prueba (.mp4)
 │   │
 │   ├── vision/                       # Pipeline de Visión por Computadora
-│   │   ├── detector.py               # YOLOv8 local (filtro económico de personas)
+│   │   ├── detector.py               # YOLO multiclase configurable por nombre
 │   │   ├── tracker.py                # Adaptador ByteTrack y contrato intercambiable
 │   │   ├── track_history.py          # Trayectoria, velocidad, dirección y TTL
+│   │   ├── zones.py                  # Zonas poligonales normalizadas por cámara
+│   │   ├── debug_overlay.py          # Overlay opcional de tracking y zonas
+│   │   ├── associations.py           # Scorer y persistencia persona-objeto
 │   │   ├── frame_buffer.py           # Buffer circular muestreado en RAM (5s a 5 FPS por defecto)
 │   │   ├── frame_selector.py         # Muestreo temporal uniforme de frames
 │   │   └── image_processor.py        # Compresión JPEG, resize y Base64
@@ -241,10 +248,17 @@ OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=onyx
 CAMERA_SOURCE=0
 YOLO_MODEL=yolov8n.pt
+DETECTION_CONFIDENCE=0.50
+DETECTION_CLASSES=person,bottle,cup,backpack,handbag
 TRACKING_ENABLED=True
 TRACKER_TYPE=bytetrack
 TRACK_HISTORY_SECONDS=15
 TRACK_TTL_SECONDS=5
+ZONE_CONFIG_PATH=config/zones.json
+VISION_DEBUG_OVERLAY=False
+ASSOCIATION_ENABLED=True
+ASSOCIATION_MIN_SCORE=0.65
+ASSOCIATION_MIN_DURATION=0.5
 BUFFER_SECONDS=5
 BUFFER_FPS=5
 ```
@@ -314,7 +328,7 @@ El diseño adopta principios de minimización de datos y evita deliberadamente l
 
 Estas mejoras forman parte de la hoja de ruta y **no se consideran implementadas en la versión actual**:
 
-- tracking multiclase y evaluación futura de BoT-SORT para oclusiones complejas;
+- evaluación futura de BoT-SORT y modelos SIVARH con clases propias de residuos;
 - pose estimation y segmentación para generar mejores eventos candidatos;
 - métricas completas de latencia, payload, precisión, recall y falsos positivos;
 - conjunto de videos positivos y negativos etiquetados;
@@ -322,6 +336,8 @@ Estas mejoras forman parte de la hoja de ruta y **no se consideran implementadas
 - configuración completamente dinámica sin reiniciar componentes;
 - autenticación y protección de endpoints para un despliegue en red;
 - cola persistente o escalable para múltiples cámaras y eventos.
+
+Las zonas iniciales viven en `config/zones.json` con coordenadas normalizadas. Son una calibración genérica de arranque y deben ajustarse con una imagen real de cada cámara antes de utilizarse para decisiones ambientales.
 
 ---
 

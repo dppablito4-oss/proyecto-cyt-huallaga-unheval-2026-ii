@@ -4,7 +4,7 @@ import numpy as np
 
 from app.camera.worker import VideoPipelineWorker
 from app.models.event import BoundingBox, LocalDetection, LocalDetectionSummary
-from app.models.tracking import Point, TrackedObject
+from app.models.tracking import Point, TrackedObject, TrackState
 from app.state import system_state
 
 
@@ -26,6 +26,7 @@ def test_worker_publishes_tracking_summary_without_changing_detection_contract()
         first_seen=timestamp,
         last_seen=timestamp,
     )
+    track_state = TrackState(**tracked.model_dump())
 
     class FakeTracker:
         last_created_track_ids = (17,)
@@ -35,17 +36,35 @@ def test_worker_publishes_tracking_summary_without_changing_detection_contract()
             assert detections == summary.detections
             return [tracked]
 
+        def assign_zones(self, assignments):
+            track_state.current_zone = assignments[17]
+
+        @property
+        def active_states(self):
+            return [track_state]
+
         def reset(self):
             return None
 
     worker = VideoPipelineWorker()
     worker._tracker = FakeTracker()
     try:
-        result = worker._update_tracking(summary, np.zeros((10, 10, 3)), timestamp)
+        result = worker._update_tracking(summary, np.zeros((100, 100, 3)), timestamp)
 
-        assert result == [tracked]
+        assert result.persons[17].track_id == tracked.track_id
+        assert result.persons[17].current_zone == "observation"
         status = system_state.to_dict()
         assert status["active_tracks"] == 1
         assert status["active_track_ids"] == [17]
+        assert status["active_person_tracks"] == 1
+        assert status["zone_occupancy"] == {"observation": 1, "riverbank": 0}
+        worker.stop()
+        assert worker.current_scene.active_tracks == 0
     finally:
-        system_state.set_tracking_status(active_tracks=0, track_ids=[])
+        system_state.set_scene_status(
+            active_persons=0,
+            active_objects=0,
+            track_ids=[],
+            zone_occupancy={},
+            timestamp=timestamp,
+        )

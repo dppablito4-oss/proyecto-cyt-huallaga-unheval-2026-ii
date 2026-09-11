@@ -13,7 +13,7 @@ Flujo de invocación:
 --------------------
 1. `app.main` inicializa y arranca el worker al evento `startup` de FastAPI.
 2. El worker abre la cámara configurada y ejecuta un ciclo continuo:
-   Frame → FrameBuffer → LocalDetector (YOLO) → EventManager → FrameSelector
+   Frame → FrameBuffer → LocalDetector (YOLO) → ByteTrack → SceneState → EventManager → FrameSelector
    → ImageProcessor → VisionAI → DecisionEngine → SpeechService → AudioOutput.
 3. En `shutdown`, el worker se detiene limpiamente cerrando la cámara y liberando recursos.
 """
@@ -35,6 +35,14 @@ from app.vision.frame_buffer import FrameBuffer
 from app.vision.frame_selector import FrameSelector
 from app.vision.image_processor import ImageProcessor
 from app.vision.tracker import create_tracker
+from app.vision.zones import ZoneManager
+from app.vision.debug_overlay import VisionDebugOverlay
+from app.vision.pose import create_pose_analyzer
+from app.vision.associations import (
+    AssociationScorer,
+    AssociationWeights,
+    PersonObjectAssociationEngine,
+)
 from app.events.manager import EventManager
 from app.events.rules import DecisionEngine
 from app.ai.vision_client import VisionAI
@@ -42,6 +50,7 @@ from app.speech.openai_tts import OpenAISpeechService
 from app.speech.audio_output import LocalSpeakerOutput
 from app.storage.local_repository import SQLiteEventsRepository
 from app.models.event import EventModel, LocalDetectionSummary
+from app.models.scene import SceneState
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +91,8 @@ class VideoPipelineWorker:
         # Componentes del pipeline
         self._detector = LocalDetector(
             model_name=settings.YOLO_MODEL,
-            confidence_threshold=settings.YOLO_PERSON_CONFIDENCE
+            confidence_threshold=settings.DETECTION_CONFIDENCE,
+            monitored_classes=settings.DETECTION_CLASSES,
         )
         self._frame_buffer = FrameBuffer(
             buffer_seconds=settings.BUFFER_SECONDS,
@@ -107,8 +117,48 @@ class VideoPipelineWorker:
             minimum_consecutive_frames=settings.TRACK_MIN_CONSECUTIVE_FRAMES,
             minimum_iou_threshold=settings.TRACK_MIN_IOU_THRESHOLD,
         )
+        zone_config_path = settings.ZONE_CONFIG_PATH
+        if not zone_config_path.is_absolute():
+            zone_config_path = settings.BASE_DIR / zone_config_path
+        self._zone_manager = ZoneManager.from_json(zone_config_path, settings.CAMERA_ID)
+        self._debug_overlay = VisionDebugOverlay(enabled=settings.VISION_DEBUG_OVERLAY)
+        self._scene_state = SceneState(camera_id=settings.CAMERA_ID)
+        pose_model_path = settings.POSE_MODEL_PATH
+        if not pose_model_path.is_absolute():
+            pose_model_path = settings.BASE_DIR / pose_model_path
+        self._pose_analyzer = create_pose_analyzer(
+            enabled=settings.POSE_ENABLED,
+            model_path=pose_model_path,
+            trigger_zones=settings.POSE_TRIGGER_ZONES,
+            fps=settings.POSE_FPS,
+            min_person_confidence=settings.POSE_MIN_PERSON_CONFIDENCE,
+            min_detection_confidence=settings.POSE_MIN_DETECTION_CONFIDENCE,
+            min_landmark_visibility=settings.POSE_MIN_LANDMARK_VISIBILITY,
+            max_persons_per_frame=settings.POSE_MAX_PERSONS_PER_FRAME,
+            result_ttl_seconds=settings.POSE_RESULT_TTL_SECONDS,
+            crop_padding_ratio=settings.POSE_CROP_PADDING_RATIO,
+            object_proximity_ratio=settings.POSE_OBJECT_PROXIMITY_RATIO,
+        )
+        self._association_engine = PersonObjectAssociationEngine(
+            enabled=settings.ASSOCIATION_ENABLED,
+            minimum_score=settings.ASSOCIATION_MIN_SCORE,
+            minimum_duration=settings.ASSOCIATION_MIN_DURATION,
+            scorer=AssociationScorer(
+                weights=AssociationWeights(
+                    bbox_proximity=settings.ASSOCIATION_BBOX_WEIGHT,
+                    centroid_proximity=settings.ASSOCIATION_CENTROID_WEIGHT,
+                    trajectory_similarity=settings.ASSOCIATION_TRAJECTORY_WEIGHT,
+                    temporal_consistency=settings.ASSOCIATION_TEMPORAL_WEIGHT,
+                    hand_proximity=settings.ASSOCIATION_HAND_WEIGHT,
+                ),
+                max_distance_ratio=settings.ASSOCIATION_MAX_DISTANCE_RATIO,
+                hand_distance_ratio=settings.ASSOCIATION_HAND_DISTANCE_RATIO,
+                trajectory_points=settings.ASSOCIATION_TRAJECTORY_POINTS,
+            ),
+        )
         self._event_manager = EventManager(
-            cooldown_seconds=settings.EVENT_COOLDOWN_SECONDS
+            cooldown_seconds=settings.EVENT_COOLDOWN_SECONDS,
+            camera_id=settings.CAMERA_ID,
         )
         self._decision_engine = DecisionEngine(
             warning_threshold=settings.AI_WARNING_THRESHOLD
@@ -120,7 +170,9 @@ class VideoPipelineWorker:
 
         # Frame compartido para streaming MJPEG (leído por el endpoint /api/cameras/stream)
         self._current_frame = None
+        self._current_raw_frame = None
         self._frame_lock = threading.Lock()
+        self._scene_lock = threading.Lock()
         self._analysis_thread: Optional[threading.Thread] = None
         self._manual_capture_thread: Optional[threading.Thread] = None
         self._manual_frames = []
@@ -134,6 +186,12 @@ class VideoPipelineWorker:
         with self._frame_lock:
             return self._current_frame
 
+    @property
+    def current_scene(self) -> SceneState:
+        """Devuelve una copia coherente del estado espacial más reciente."""
+        with self._scene_lock:
+            return self._scene_state.model_copy(deep=True)
+
     def start(self) -> bool:
         """Arranca el hilo de captura continua."""
         if self._thread is not None and self._thread.is_alive():
@@ -142,7 +200,22 @@ class VideoPipelineWorker:
 
         self._stop_event.clear()
         self._tracker.reset()
-        system_state.set_tracking_status(active_tracks=0, track_ids=[])
+        self._pose_analyzer.reset()
+        self._association_engine.reset()
+        now = datetime.now()
+        system_state.set_detection_status(persons=0, objects=0, counts_by_label={})
+        system_state.set_scene_status(
+            active_persons=0,
+            active_objects=0,
+            track_ids=[],
+            zone_occupancy={},
+            timestamp=now,
+        )
+        with self._scene_lock:
+            self._scene_state = SceneState(camera_id=settings.CAMERA_ID, timestamp=now)
+        with self._frame_lock:
+            self._current_frame = None
+            self._current_raw_frame = None
         self._thread = threading.Thread(target=self._run_loop, name="VideoPipelineWorker", daemon=True)
         self._thread.start()
         logger.info("VideoPipelineWorker iniciado.")
@@ -164,7 +237,22 @@ class VideoPipelineWorker:
             self._camera = None
         system_state.set_camera_status(connected=False, source=settings.CAMERA_SOURCE, fps=0.0)
         self._tracker.reset()
-        system_state.set_tracking_status(active_tracks=0, track_ids=[])
+        self._pose_analyzer.reset()
+        self._association_engine.reset()
+        stopped_at = datetime.now()
+        system_state.set_detection_status(persons=0, objects=0, counts_by_label={})
+        system_state.set_scene_status(
+            active_persons=0,
+            active_objects=0,
+            track_ids=[],
+            zone_occupancy={},
+            timestamp=stopped_at,
+        )
+        with self._scene_lock:
+            self._scene_state = SceneState(camera_id=settings.CAMERA_ID, timestamp=stopped_at)
+        with self._frame_lock:
+            self._current_frame = None
+            self._current_raw_frame = None
         logger.info("VideoPipelineWorker detenido.")
 
     def start_manual_recognition(self) -> tuple[bool, str]:
@@ -199,7 +287,7 @@ class VideoPipelineWorker:
 
         event = EventModel(
             id=str(uuid.uuid4()),
-            camera_id="CAM_001",
+            camera_id=settings.CAMERA_ID,
             started_at=datetime.now(),
             status="created",
             local_detection=LocalDetectionSummary(),
@@ -236,7 +324,7 @@ class VideoPipelineWorker:
             if self._stop_event.is_set():
                 return
             with self._frame_lock:
-                frame = None if self._current_frame is None else self._current_frame.copy()
+                frame = None if self._current_raw_frame is None else self._current_raw_frame.copy()
             if frame is None:
                 system_state.add_log("ERROR", "[MANUAL] No se pudo obtener un fotograma de la cámara.")
                 system_state.set_manual_sequence_status(captured=len(captured), ready=False)
@@ -311,27 +399,63 @@ class VideoPipelineWorker:
         return applied
 
     def _update_tracking(self, detection, frame, timestamp: datetime):
-        """Actualiza ByteTrack y publica solo un resumen anónimo para la API."""
+        """Actualiza tracking, zonas y SceneState para el frame actual."""
         try:
             tracked_objects = self._tracker.update(
                 detection.detections,
                 timestamp=timestamp,
                 frame=frame,
             )
-            track_ids = [tracked.track_id for tracked in tracked_objects]
-            system_state.set_tracking_status(
-                active_tracks=len(tracked_objects),
+            assignments, zone_states = self._zone_manager.locate(
+                tracked_objects,
+                frame.shape,
+            )
+            self._tracker.assign_zones(assignments)
+            active_states = self._tracker.active_states
+            with self._scene_lock:
+                self._scene_state.update(active_states, zone_states, timestamp)
+                poses = self._pose_analyzer.update(frame, self._scene_state)
+                self._scene_state.set_poses(poses)
+                associations = self._association_engine.update(self._scene_state)
+                self._scene_state.set_associations(associations)
+                scene = self._scene_state.model_copy(deep=True)
+            track_ids = [track.track_id for track in active_states]
+            system_state.set_scene_status(
+                active_persons=len(scene.persons),
+                active_objects=len(scene.objects),
                 track_ids=track_ids,
+                zone_occupancy={
+                    name: zone.occupancy
+                    for name, zone in scene.zones.items()
+                },
+                timestamp=timestamp,
+                association_candidates=len(scene.associations),
+                confirmed_associations=sum(
+                    association.confirmed
+                    for association in scene.associations
+                ),
+                active_pose_tracks=sum(
+                    person.pose is not None
+                    for person in scene.persons.values()
+                ),
             )
             for track_id in self._tracker.last_created_track_ids:
-                system_state.add_log("TRACK", f"[TRACK] Person #{track_id} created.")
+                system_state.add_log("TRACK", f"[TRACK] Track #{track_id} creado.")
             for track_id in self._tracker.last_expired_track_ids:
-                system_state.add_log("TRACK", f"[TRACK] Person #{track_id} expired.")
-            return tracked_objects
+                system_state.add_log("TRACK", f"[TRACK] Track #{track_id} expirado.")
+            return scene
         except Exception as exc:
-            logger.error("Error actualizando ByteTrack: %s", exc)
-            system_state.set_tracking_status(active_tracks=0, track_ids=[])
-            return []
+            logger.error("Error actualizando el estado espacial: %s", exc)
+            system_state.set_scene_status(
+                active_persons=0,
+                active_objects=0,
+                track_ids=[],
+                zone_occupancy={},
+                timestamp=timestamp,
+            )
+            with self._scene_lock:
+                self._scene_state.update([], {}, timestamp)
+                return self._scene_state.model_copy(deep=True)
 
     def _run_loop(self) -> None:
         """
@@ -365,9 +489,9 @@ class VideoPipelineWorker:
 
             frame_timestamp = datetime.now()
 
-            # Guardar frame actual para streaming MJPEG
+            # Mantener la evidencia cruda separada del frame de depuración.
             with self._frame_lock:
-                self._current_frame = frame
+                self._current_raw_frame = frame
 
             # Almacenar en buffer circular
             self._frame_buffer.add_frame(frame, timestamp=frame_timestamp)
@@ -383,13 +507,25 @@ class VideoPipelineWorker:
                     connected=True, source=settings.CAMERA_SOURCE, fps=round(measured_fps, 1)
                 )
 
-            # Detección local de personas con YOLO
-            detection = self._detector.detect_persons(frame)
-            system_state.set_persons_detected(detection.persons)
+            # Detección local multiclase. El resumen heredado mantiene EventManager intacto.
+            detection_frame = self._detector.detect(frame, timestamp=frame_timestamp)
+            detection = detection_frame.to_local_summary()
+            system_state.set_detection_status(
+                persons=len(detection_frame.persons),
+                objects=len(detection_frame.objects),
+                counts_by_label=detection_frame.counts_by_label,
+            )
 
-            # Fase 1 de SIVARH v2: tracking persistente de las detecciones actuales.
+            # Fases 1-3 de SIVARH v2: tracking y escena para detecciones multiclase.
             # La generación de eventos continúa sin cambios hasta la Fase 7.
-            self._update_tracking(detection, frame, frame_timestamp)
+            scene = self._update_tracking(detection_frame, frame, frame_timestamp)
+            display_frame = self._debug_overlay.annotate(
+                frame,
+                scene,
+                self._zone_manager,
+            )
+            with self._frame_lock:
+                self._current_frame = display_frame
 
             # Durante pruebas manuales no se usa cooldown ni se dispara análisis por detección.
             if settings.MANUAL_RECOGNITION_MODE:

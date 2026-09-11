@@ -37,6 +37,12 @@ class TrackHistory:
         while self._trajectory and self._trajectory[0].timestamp < cutoff:
             self._trajectory.popleft()
 
+    def set_latest_zone(self, zone: Optional[str]) -> None:
+        """Actualiza la zona de la observación más reciente tras el cálculo espacial."""
+        with self._lock:
+            if self._trajectory:
+                self._trajectory[-1].zone = zone
+
     @property
     def trajectory(self) -> list[TrajectoryPoint]:
         with self._lock:

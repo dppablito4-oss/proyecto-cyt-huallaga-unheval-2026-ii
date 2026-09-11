@@ -6,6 +6,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from app.models.event import BoundingBox
+from app.models.pose import PoseState
 
 
 class Point(BaseModel):
@@ -55,3 +56,4 @@ class TrackState(BaseModel):
     speed: float = Field(0.0, ge=0.0)
     distance_travelled: float = Field(0.0, ge=0.0)
     visible: bool = True
+    pose: Optional[PoseState] = None

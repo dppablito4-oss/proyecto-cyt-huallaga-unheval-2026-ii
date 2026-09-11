@@ -10,10 +10,13 @@ from typing import Any, Optional, Protocol, Sequence
 import numpy as np
 
 from app.models.event import BoundingBox, LocalDetection
+from app.models.detection import Detection
 from app.models.tracking import Point, TrackedObject, TrackState
 from app.vision.track_history import TrackHistory
 
 logger = logging.getLogger(__name__)
+
+DetectionInput = Detection | LocalDetection
 
 
 class MultiObjectTracker(Protocol):
@@ -24,12 +27,14 @@ class MultiObjectTracker(Protocol):
 
     def update(
         self,
-        detections: Sequence[LocalDetection],
+        detections: Sequence[DetectionInput],
         timestamp: datetime,
         frame: Any = None,
     ) -> list[TrackedObject]: ...
 
     def reset(self) -> None: ...
+
+    def assign_zones(self, assignments: dict[int, Optional[str]]) -> None: ...
 
     @property
     def active_states(self) -> list[TrackState]: ...
@@ -43,13 +48,16 @@ class NullTracker:
 
     def update(
         self,
-        detections: Sequence[LocalDetection],
+        detections: Sequence[DetectionInput],
         timestamp: datetime,
         frame: Any = None,
     ) -> list[TrackedObject]:
         return []
 
     def reset(self) -> None:
+        return None
+
+    def assign_zones(self, assignments: dict[int, Optional[str]]) -> None:
         return None
 
     @property
@@ -104,7 +112,7 @@ class ByteTrackAdapter:
         return self._backend
 
     @staticmethod
-    def _to_supervision(detections: Sequence[LocalDetection]):
+    def _to_supervision(detections: Sequence[DetectionInput]):
         import supervision as sv
 
         usable = [detection for detection in detections if detection.bbox is not None]
@@ -116,14 +124,16 @@ class ByteTrackAdapter:
                 dtype=np.float32,
             ),
             confidence=np.asarray([d.confidence for d in usable], dtype=np.float32),
-            # Fase 1 conserva el detector de personas actual. Fase 3 generalizará estos IDs.
-            class_id=np.zeros(len(usable), dtype=np.int32),
+            class_id=np.asarray(
+                [getattr(detection, "class_id", 0) for detection in usable],
+                dtype=np.int32,
+            ),
             data={"class_name": np.asarray([d.label for d in usable])},
         )
 
     def update(
         self,
-        detections: Sequence[LocalDetection],
+        detections: Sequence[DetectionInput],
         timestamp: datetime,
         frame: Any = None,
     ) -> list[TrackedObject]:
@@ -132,7 +142,6 @@ class ByteTrackAdapter:
             return []
         tracked = backend.update(
             self._to_supervision(detections),
-            frame=frame,
             timestamp=timestamp.timestamp(),
         )
 
@@ -214,6 +223,19 @@ class ByteTrackAdapter:
             self._first_seen.pop(track_id, None)
             self._last_seen.pop(track_id, None)
         return expired
+
+    def assign_zones(self, assignments: dict[int, Optional[str]]) -> None:
+        """Incorpora al historial las zonas calculadas después del tracking."""
+        with self._lock:
+            for track_id, zone in assignments.items():
+                history = self._histories.get(track_id)
+                state = self._states.get(track_id)
+                if history is None or state is None:
+                    continue
+                history.set_latest_zone(zone)
+                state.trajectory = history.trajectory
+                state.current_zone = history.current_zone
+                state.previous_zone = history.previous_zone
 
     @property
     def active_states(self) -> list[TrackState]:

@@ -44,8 +44,19 @@ class SystemStatusModel(BaseModel):
     camera_source: str = Field("0", description="Identificador o URL de la fuente de cámara.")
     fps: float = Field(0.0, description="Cuadros por segundo de procesamiento en tiempo real.")
     persons_detected: int = Field(0, description="Cantidad de personas detectadas actualmente por YOLO.")
+    objects_detected: int = Field(0, description="Cantidad de objetos no personales detectados por YOLO.")
+    detection_counts: Dict[str, int] = Field(default_factory=dict, description="Detecciones actuales agrupadas por clase.")
     active_tracks: int = Field(0, description="Cantidad de tracks confirmados visibles en el frame actual.")
     active_track_ids: List[int] = Field(default_factory=list, description="Identificadores temporales anónimos visibles.")
+    active_person_tracks: int = Field(0, description="Personas con track confirmado actualmente visibles.")
+    active_objects: int = Field(0, description="Objetos no personales actualmente visibles.")
+    zone_occupancy: Dict[str, int] = Field(default_factory=dict, description="Tracks presentes por zona ambiental.")
+    scene_timestamp: Optional[str] = Field(None, description="Última actualización del estado espacial.")
+    vision_debug_overlay: bool = Field(False, description="Indica si el stream muestra el overlay de visión.")
+    association_candidates: int = Field(0, description="Relaciones persona-objeto actualmente evaluadas.")
+    confirmed_associations: int = Field(0, description="Relaciones que cumplieron score y persistencia mínimos.")
+    active_pose_tracks: int = Field(0, description="Personas con una pose reciente disponible.")
+    pose_enabled: bool = Field(False, description="Indica si el análisis selectivo de pose fue habilitado.")
     active_event: bool = Field(False, description="Indica si existe una ventana de captura de evento activa.")
     cooldown_remaining: float = Field(0.0, description="Segundos restantes de enfriamiento activo.")
     last_event_time: Optional[str] = Field(None, description="Marca de tiempo ISO del último evento detectado.")
@@ -79,8 +90,17 @@ class SystemState:
         self._camera_source = settings.CAMERA_SOURCE
         self._fps = 0.0
         self._persons_detected = 0
+        self._objects_detected = 0
+        self._detection_counts: Dict[str, int] = {}
         self._active_tracks = 0
         self._active_track_ids: List[int] = []
+        self._active_person_tracks = 0
+        self._active_objects = 0
+        self._zone_occupancy: Dict[str, int] = {}
+        self._scene_timestamp: Optional[datetime] = None
+        self._association_candidates = 0
+        self._confirmed_associations = 0
+        self._active_pose_tracks = 0
         self._active_event = False
         self._cooldown_remaining = 0.0
         self._last_event_time: Optional[datetime] = None
@@ -134,8 +154,19 @@ class SystemState:
                 "camera_source": self._camera_source,
                 "fps": self._fps,
                 "persons_detected": self._persons_detected,
+                "objects_detected": self._objects_detected,
+                "detection_counts": dict(self._detection_counts),
                 "active_tracks": self._active_tracks,
                 "active_track_ids": list(self._active_track_ids),
+                "active_person_tracks": self._active_person_tracks,
+                "active_objects": self._active_objects,
+                "zone_occupancy": dict(self._zone_occupancy),
+                "scene_timestamp": self._scene_timestamp.isoformat() if self._scene_timestamp else None,
+                "vision_debug_overlay": settings.VISION_DEBUG_OVERLAY,
+                "association_candidates": self._association_candidates,
+                "confirmed_associations": self._confirmed_associations,
+                "active_pose_tracks": self._active_pose_tracks,
+                "pose_enabled": settings.POSE_ENABLED,
                 "active_event": self._active_event,
                 "cooldown_remaining": self._cooldown_remaining,
                 "last_event_time": self._last_event_time.isoformat() if self._last_event_time else None,
@@ -168,11 +199,46 @@ class SystemState:
         with self._lock:
             self._persons_detected = count
 
+    def set_detection_status(
+        self,
+        persons: int,
+        objects: int,
+        counts_by_label: Dict[str, int],
+    ) -> None:
+        """Publica el resultado multiclase sin retirar el contador heredado."""
+        with self._lock:
+            self._persons_detected = persons
+            self._objects_detected = objects
+            self._detection_counts = dict(counts_by_label)
+
     def set_tracking_status(self, active_tracks: int, track_ids: List[int]) -> None:
         """Publica un resumen compatible del tracking sin exponer datos biométricos."""
         with self._lock:
             self._active_tracks = active_tracks
             self._active_track_ids = list(track_ids)
+
+    def set_scene_status(
+        self,
+        active_persons: int,
+        active_objects: int,
+        track_ids: List[int],
+        zone_occupancy: Dict[str, int],
+        timestamp: datetime,
+        association_candidates: int = 0,
+        confirmed_associations: int = 0,
+        active_pose_tracks: int = 0,
+    ) -> None:
+        """Publica el resumen espacial derivado de SceneState."""
+        with self._lock:
+            self._active_person_tracks = active_persons
+            self._active_objects = active_objects
+            self._active_tracks = active_persons + active_objects
+            self._active_track_ids = list(track_ids)
+            self._zone_occupancy = dict(zone_occupancy)
+            self._scene_timestamp = timestamp
+            self._association_candidates = association_candidates
+            self._confirmed_associations = confirmed_associations
+            self._active_pose_tracks = active_pose_tracks
 
     def set_cooldown_remaining(self, seconds: float) -> None:
         """Actualiza el tiempo restante de enfriamiento."""

@@ -16,7 +16,7 @@ Flujo de invocación:
 
 import os
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from dotenv import load_dotenv
 
 # Ruta absoluta al archivo .env ubicado en la raíz del proyecto
@@ -33,11 +33,13 @@ class Settings(BaseModel):
     arranque incluso si no se dispone de un archivo .env configurado.
     """
 
+    model_config = ConfigDict(validate_default=True)
+
     # ==========================================
     # 1. Configuración General de la Aplicación
     # ==========================================
     APP_NAME: str = "SIVARH"
-    APP_VERSION: str = "0.5.1"
+    APP_VERSION: str = "0.6.0"
     APP_ENV: str = os.getenv("APP_ENV", "development")
     DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
     HOST: str = os.getenv("HOST", "127.0.0.1")
@@ -70,6 +72,7 @@ class Settings(BaseModel):
     # Fuente de captura: número entero "0", "1" (webcam) o URL RTSP "rtsp://..."
     # Utilizado por `app.camera.usb_camera.UsbCamera` y `app.camera.rtsp_camera.RtspCamera`
     CAMERA_SOURCE: str = os.getenv("CAMERA_SOURCE", "0")
+    CAMERA_ID: str = os.getenv("CAMERA_ID", "CAM_001")
     CAMERA_FPS: int = int(os.getenv("CAMERA_FPS", "30"))
     CAMERA_WIDTH: int = int(os.getenv("CAMERA_WIDTH", "1280"))
     CAMERA_HEIGHT: int = int(os.getenv("CAMERA_HEIGHT", "720"))
@@ -79,7 +82,33 @@ class Settings(BaseModel):
     # ==========================================
     # Utilizado por `app.vision.detector.LocalDetector` como filtro de bajo costo
     YOLO_MODEL: str = os.getenv("YOLO_MODEL", "yolov8n.pt")
-    YOLO_PERSON_CONFIDENCE: float = float(os.getenv("YOLO_PERSON_CONFIDENCE", "0.50"))
+    # Alias heredado: se conserva para instalaciones existentes.
+    YOLO_PERSON_CONFIDENCE: float = Field(
+        default=float(os.getenv("YOLO_PERSON_CONFIDENCE", "0.50")), ge=0.0, le=1.0
+    )
+    DETECTION_CONFIDENCE: float = Field(
+        default=float(
+            os.getenv(
+                "DETECTION_CONFIDENCE",
+                os.getenv("YOLO_PERSON_CONFIDENCE", "0.50"),
+            )
+        ),
+        ge=0.0,
+        le=1.0,
+    )
+    DETECTION_CLASSES: tuple[str, ...] = Field(
+        default=tuple(
+            dict.fromkeys(
+                name.strip().casefold()
+                for name in os.getenv(
+                    "DETECTION_CLASSES",
+                    "person,bottle,cup,backpack,handbag",
+                ).split(",")
+                if name.strip()
+            )
+        ),
+        min_length=1,
+    )
 
     # ==========================================
     # 4.1. Tracking temporal anónimo (SIVARH v2)
@@ -97,6 +126,108 @@ class Settings(BaseModel):
     )
     TRACK_MIN_IOU_THRESHOLD: float = Field(
         default=float(os.getenv("TRACK_MIN_IOU_THRESHOLD", "0.10")), ge=0.0, le=1.0
+    )
+
+    # ==========================================
+    # 4.2. Estado espacial y overlay (SIVARH v2)
+    # ==========================================
+    ZONE_CONFIG_PATH: Path = Path(
+        os.getenv(
+            "ZONE_CONFIG_PATH",
+            str(Path(__file__).resolve().parent.parent / "config" / "zones.json"),
+        )
+    )
+    VISION_DEBUG_OVERLAY: bool = os.getenv("VISION_DEBUG_OVERLAY", "False").lower() in (
+        "true", "1", "yes"
+    )
+
+    # ==========================================
+    # 4.3. Asociación persona-objeto (SIVARH v2)
+    # ==========================================
+    ASSOCIATION_ENABLED: bool = os.getenv("ASSOCIATION_ENABLED", "True").lower() in (
+        "true", "1", "yes"
+    )
+    ASSOCIATION_MIN_SCORE: float = Field(
+        default=float(os.getenv("ASSOCIATION_MIN_SCORE", "0.65")), ge=0.0, le=1.0
+    )
+    ASSOCIATION_MIN_DURATION: float = Field(
+        default=float(os.getenv("ASSOCIATION_MIN_DURATION", "0.5")), ge=0.0
+    )
+    ASSOCIATION_BBOX_WEIGHT: float = Field(
+        default=float(os.getenv("ASSOCIATION_BBOX_WEIGHT", "0.35")), ge=0.0
+    )
+    ASSOCIATION_CENTROID_WEIGHT: float = Field(
+        default=float(os.getenv("ASSOCIATION_CENTROID_WEIGHT", "0.25")), ge=0.0
+    )
+    ASSOCIATION_TRAJECTORY_WEIGHT: float = Field(
+        default=float(os.getenv("ASSOCIATION_TRAJECTORY_WEIGHT", "0.25")), ge=0.0
+    )
+    ASSOCIATION_TEMPORAL_WEIGHT: float = Field(
+        default=float(os.getenv("ASSOCIATION_TEMPORAL_WEIGHT", "0.15")), ge=0.0
+    )
+    ASSOCIATION_HAND_WEIGHT: float = Field(
+        default=float(os.getenv("ASSOCIATION_HAND_WEIGHT", "0.25")), ge=0.0
+    )
+    ASSOCIATION_MAX_DISTANCE_RATIO: float = Field(
+        default=float(os.getenv("ASSOCIATION_MAX_DISTANCE_RATIO", "1.5")), gt=0.0
+    )
+    ASSOCIATION_HAND_DISTANCE_RATIO: float = Field(
+        default=float(os.getenv("ASSOCIATION_HAND_DISTANCE_RATIO", "0.5")), gt=0.0
+    )
+    ASSOCIATION_TRAJECTORY_POINTS: int = Field(
+        default=int(os.getenv("ASSOCIATION_TRAJECTORY_POINTS", "5")), ge=2
+    )
+
+    # ==========================================
+    # 4.4. Pose corporal selectiva (SIVARH v2)
+    # ==========================================
+    # MediaPipe es opcional: si se desactiva, falta el paquete o falta el modelo,
+    # las asociaciones continúan con las señales geométricas y temporales.
+    POSE_ENABLED: bool = os.getenv("POSE_ENABLED", "False").lower() in (
+        "true", "1", "yes"
+    )
+    POSE_MODEL_PATH: Path = Path(
+        os.getenv(
+            "POSE_MODEL_PATH",
+            str(
+                Path(__file__).resolve().parent.parent
+                / "data"
+                / "models"
+                / "pose_landmarker_lite.task"
+            ),
+        )
+    )
+    POSE_FPS: float = Field(default=float(os.getenv("POSE_FPS", "7")), gt=0.0)
+    POSE_MIN_PERSON_CONFIDENCE: float = Field(
+        default=float(os.getenv("POSE_MIN_PERSON_CONFIDENCE", "0.60")), ge=0.0, le=1.0
+    )
+    POSE_MIN_DETECTION_CONFIDENCE: float = Field(
+        default=float(os.getenv("POSE_MIN_DETECTION_CONFIDENCE", "0.50")), ge=0.0, le=1.0
+    )
+    POSE_MIN_LANDMARK_VISIBILITY: float = Field(
+        default=float(os.getenv("POSE_MIN_LANDMARK_VISIBILITY", "0.50")), ge=0.0, le=1.0
+    )
+    POSE_TRIGGER_ZONES: tuple[str, ...] = tuple(
+        dict.fromkeys(
+            name.strip().casefold()
+            for name in os.getenv(
+                "POSE_TRIGGER_ZONES",
+                "observation,riverbank,river_edge,water",
+            ).split(",")
+            if name.strip()
+        )
+    )
+    POSE_MAX_PERSONS_PER_FRAME: int = Field(
+        default=int(os.getenv("POSE_MAX_PERSONS_PER_FRAME", "2")), ge=1
+    )
+    POSE_RESULT_TTL_SECONDS: float = Field(
+        default=float(os.getenv("POSE_RESULT_TTL_SECONDS", "0.5")), gt=0.0
+    )
+    POSE_CROP_PADDING_RATIO: float = Field(
+        default=float(os.getenv("POSE_CROP_PADDING_RATIO", "0.15")), ge=0.0, le=1.0
+    )
+    POSE_OBJECT_PROXIMITY_RATIO: float = Field(
+        default=float(os.getenv("POSE_OBJECT_PROXIMITY_RATIO", "0.5")), gt=0.0
     )
 
     # ==========================================
@@ -139,6 +270,19 @@ class Settings(BaseModel):
     DATA_DIR: Path = BASE_DIR / "data"
     PROMPTS_DIR: Path = BASE_DIR / "prompts"
     FRONTEND_DIR: Path = BASE_DIR / "frontend"
+
+    @model_validator(mode="after")
+    def validate_association_weights(self):
+        total = (
+            self.ASSOCIATION_BBOX_WEIGHT
+            + self.ASSOCIATION_CENTROID_WEIGHT
+            + self.ASSOCIATION_TRAJECTORY_WEIGHT
+            + self.ASSOCIATION_TEMPORAL_WEIGHT
+            + self.ASSOCIATION_HAND_WEIGHT
+        )
+        if total <= 0:
+            raise ValueError("Al menos un peso de asociación debe ser mayor que cero.")
+        return self
 
 
 # Instancia única (Singleton) para ser consumida por todo el proyecto

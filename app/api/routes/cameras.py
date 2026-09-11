@@ -38,7 +38,7 @@ def get_camera_status():
     from app.main import pipeline_worker
 
     return CameraStatus(
-        camera_id="CAM_001",
+        camera_id=settings.CAMERA_ID,
         source=settings.CAMERA_SOURCE,
         is_connected=pipeline_worker.is_running,
         width=settings.CAMERA_WIDTH,
