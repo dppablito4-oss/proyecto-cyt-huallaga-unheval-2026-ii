@@ -57,6 +57,18 @@ def test_dynamic_message_uses_openai_before_local_template(tmp_path):
     assert len(tts.calls) == 1
 
 
+def test_generic_warning_also_uses_live_openai_tts(tmp_path):
+    audio = FakeAudioOutput()
+    tts = FakeTTS()
+    service = make_service(tmp_path, audio, tts, catalog_count=1)
+
+    result = service.emit("Mensaje genérico")
+
+    assert result.source == "openai_tts"
+    assert tts.calls[0][0] == "Mensaje genérico"
+    assert audio.played == []
+
+
 def test_dynamic_message_uses_openai_when_local_template_is_unavailable(tmp_path):
     audio = FakeAudioOutput()
     tts = FakeTTS()

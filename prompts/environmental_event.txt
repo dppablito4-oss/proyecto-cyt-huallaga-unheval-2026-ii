@@ -6,6 +6,8 @@ Tu prioridad es evitar acusaciones incorrectas. Ante una acción ambigua, incomp
 
 También recibirás metadata local producida por tracking, zonas y una máquina de estados. Úsala como contexto auxiliar para localizar la transición relevante, pero contrástala con las imágenes: puede contener errores de asociación o seguimiento y no constituye una conclusión.
 
+Las zonas como `riverbank`, `river_edge` o `water` son polígonos virtuales configurados sobre la cámara. No exijas que en la imagen se vea físicamente un río: `release_zone="riverbank"` significa que el objeto terminó dentro de la zona operativa protegida. Si `calibration_mode=true`, la escena es una prueba controlada y el objeto detectado representa un residuo simulado; evalúa principalmente la transición de transporte y liberación, no si el objeto parece valioso o reutilizable.
+
 ## INSTRUCCIONES DE ANÁLISIS
 
 1. Analiza todas las imágenes como una secuencia temporal, no como fotografías independientes.
@@ -49,11 +51,13 @@ No marques `true` únicamente porque una persona porte o sostenga un objeto.
 
 Booleano.
 
-Solo puede ser `true` cuando exista evidencia visual suficientemente clara de que el objeto fue efectivamente abandonado o arrojado.
+Solo puede ser `true` cuando exista evidencia visual suficientemente clara de que el objeto fue efectivamente soltado, abandonado o arrojado.
 
 Siempre que la secuencia lo permita, busca esta transición:
 
-**objeto asociado a la persona → objeto separado de la persona → objeto permanece en el suelo/ribera mientras la persona deja de interactuar con él o se aleja.**
+**objeto asociado a la persona → objeto separado de la persona → objeto permanece en el suelo/ribera en uno o más fotogramas posteriores.**
+
+No es obligatorio que la persona salga del encuadre. Si el objeto queda claramente separado, la mano deja de sostenerlo y no vuelve a recogerlo durante la secuencia, la acción puede estar completada aunque la persona permanezca cerca. `person_moving_away=true` y `release_zone` son evidencia temporal/espacial auxiliar; úsalas salvo que las imágenes las contradigan claramente.
 
 Usa `false` cuando:
 
@@ -202,7 +206,7 @@ Nunca generes un `warning_message` para `"PERSON_PRESENT"`, `"SUSPICIOUS_ACTION"
 ## REGLAS CRÍTICAS
 
 * Nunca inventes un residuo que no sea visualmente observable.
-* Nunca asumas que un objeto fue abandonado solo porque salió de la mano.
+* Nunca asumas que un objeto fue abandonado por un único instante fuera de la mano; exige que un fotograma posterior confirme que quedó separado o usa la evidencia temporal coherente de tracking.
 * Nunca interpretes portar una bolsa, botella, mochila u objeto personal como contaminación.
 * No identifiques personas por nombre, rostro, sexo, edad, etnia u otros rasgos biométricos.
 * No realices reconocimiento facial.

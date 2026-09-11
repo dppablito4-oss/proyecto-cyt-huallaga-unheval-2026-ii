@@ -22,6 +22,7 @@ data/audio/*
 !data/audio/.gitkeep
 !data/audio/templates/
 !data/audio/templates/*.wav
+data/runtime-*.log
 data/test_videos/*
 !data/test_videos/.gitkeep
 

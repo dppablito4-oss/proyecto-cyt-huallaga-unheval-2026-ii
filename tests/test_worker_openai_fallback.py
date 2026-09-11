@@ -7,6 +7,7 @@ from app.config import settings
 from app.models.analysis import AIAnalysisResult
 from app.models.event import EventModel
 from app.speech.cached_warning import WarningPlaybackResult
+from app.state import system_state
 
 
 class FakeRepository:
@@ -84,7 +85,8 @@ def test_confirmed_local_event_skips_openai(monkeypatch):
         assert repository.saved[0].metrics["payload_bytes"] == 0
         assert repository.saved[0].metrics["openai_fallback_ratio"] == 0.0
         assert worker._metrics.get_recent_metrics(1)[0].decision == "WARN"
-        assert warning_speech.messages == [None]
+        assert warning_speech.messages == [settings.LOCAL_WARNING_MESSAGE]
+        assert system_state.to_dict()["alert_pending"] is False
     finally:
         worker.stop()
 
@@ -112,6 +114,8 @@ def test_uncertain_event_sends_metadata_and_three_event_keyframes(monkeypatch):
         assert len(images) == 3
         assert metadata["candidate_id"] == "uncertain"
         assert metadata["local_event_score"] == 0.6
+        assert metadata["calibration_mode"] == settings.CALIBRATION_MODE
+        assert metadata["configured_relevant_zones"] == list(settings.EVENT_RELEVANT_ZONES)
         assert repository.saved[0].openai_used is True
         assert repository.saved[0].decision == "LOG_ONLY"
         assert repository.saved[0].metrics["frames_sent"] == 3

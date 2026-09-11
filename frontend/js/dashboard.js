@@ -156,9 +156,28 @@ const Dashboard = {
       const image = document.createElement('img');
       image.src = `${url}?v=${encodeURIComponent(this.previewKey)}`;
       image.alt = `Fotograma ${index + 1} de la secuencia enviada a la IA`;
+      image.loading = 'lazy';
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'preview-frame-error';
+      retry.textContent = 'No disponible · Reintentar';
+      retry.hidden = true;
+      retry.addEventListener('click', () => {
+        retry.hidden = true;
+        image.hidden = false;
+        image.src = `${url}?v=${Date.now()}`;
+      });
+      image.addEventListener('error', () => {
+        image.hidden = true;
+        retry.hidden = false;
+      });
+      image.addEventListener('load', () => {
+        image.hidden = false;
+        retry.hidden = true;
+      });
       const caption = document.createElement('span');
       caption.textContent = `Fotograma ${index + 1}`;
-      figure.append(image, caption);
+      figure.append(image, retry, caption);
       container.appendChild(figure);
     });
   },

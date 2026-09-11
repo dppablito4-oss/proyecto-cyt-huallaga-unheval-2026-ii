@@ -135,6 +135,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const testLiveTtsBtn = document.getElementById('btn-test-live-tts');
+  const liveTtsStatus = document.getElementById('live-tts-status');
+  testLiveTtsBtn?.addEventListener('click', async () => {
+    const warningText = document.getElementById('warning-text')?.textContent?.trim();
+    const text = warningText && warningText !== 'Sin advertencias emitidas.'
+      ? warningText
+      : 'Cuidemos juntos el Huallaga. Por favor, recoge el residuo y deposítalo en un contenedor.';
+    testLiveTtsBtn.disabled = true;
+    testLiveTtsBtn.setAttribute('aria-busy', 'true');
+    testLiveTtsBtn.textContent = 'Conectando con OpenAI...';
+    if (liveTtsStatus) liveTtsStatus.textContent = 'Enviando la petición y esperando el primer audio...';
+    const result = await API.testSpeech(text, speechVoice?.value || 'onyx', Number(speechSpeed?.value || 1.1));
+    if (result?.audio_generated && result?.played_locally) {
+      if (liveTtsStatus) liveTtsStatus.textContent = `Voz recibida y reproducida: ${result.voice} · ${Number(result.speed).toFixed(2)}x`;
+    } else if (liveTtsStatus) {
+      liveTtsStatus.textContent = 'No se pudo reproducir. Revisa la clave API, la red y el dispositivo de audio.';
+    }
+    testLiveTtsBtn.disabled = false;
+    testLiveTtsBtn.removeAttribute('aria-busy');
+    testLiveTtsBtn.textContent = 'Probar voz OpenAI';
+  });
+
   const alertModal = document.getElementById('alert-confirmation-modal');
   const emitAlertBtn = document.getElementById('btn-emit-alert');
   const dismissAlertBtn = document.getElementById('btn-dismiss-alert');

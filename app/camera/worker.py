@@ -828,9 +828,16 @@ class VideoPipelineWorker:
                     f"a {settings.OPENAI_VISION_MODEL}.",
                 )
                 t_ai_start = time.perf_counter()
+                event_metadata = event.openai_metadata()
+                event_metadata.update(
+                    {
+                        "calibration_mode": settings.CALIBRATION_MODE,
+                        "configured_relevant_zones": list(settings.EVENT_RELEVANT_ZONES),
+                    }
+                )
                 ai_result = self._vision_ai.analyze_sequence(
                     jpeg_frames,
-                    event_metadata=event.openai_metadata(),
+                    event_metadata=event_metadata,
                 )
                 ai_latency = time.perf_counter() - t_ai_start
                 self._metrics.record_openai_latency(ai_latency * 1000.0)
@@ -906,13 +913,12 @@ class VideoPipelineWorker:
             tts_latency_ms = 0.0
             if decision == "WARN" and warning_message and not is_manual:
                 audio_started = time.perf_counter()
-                playback = self._warning_speech.emit(
-                    ai_result.warning_message if ai_result is not None else None
-                )
+                playback = self._warning_speech.emit(warning_message)
                 tts_latency_ms = (time.perf_counter() - audio_started) * 1000.0
                 event.metrics["audio_source"] = playback.source
                 system_state.set_audio_source(playback.source)
                 if playback.emitted:
+                    system_state.mark_alert_emitted()
                     system_state.add_log(
                         "AUDIO",
                         f"[AUDIO] Advertencia emitida mediante {playback.source}.",

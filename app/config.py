@@ -41,6 +41,9 @@ class Settings(BaseModel):
     APP_NAME: str = "SIVARH"
     APP_VERSION: str = "0.10.0"
     APP_ENV: str = os.getenv("APP_ENV", "development")
+    CALIBRATION_MODE: bool = os.getenv("CALIBRATION_MODE", "False").lower() in (
+        "true", "1", "yes"
+    )
     DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
     HOST: str = os.getenv("HOST", "127.0.0.1")
     PORT: int = int(os.getenv("PORT", "8000"))

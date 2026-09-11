@@ -943,6 +943,14 @@ textarea::placeholder {
     );
 }
 
+.warning-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 /* =========================================================
    SPEECH
    ========================================================= */
@@ -1082,6 +1090,25 @@ input[type="range"] {
   display: block;
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+.preview-frame-error {
+  width: 148px;
+  height: 83px;
+  padding: 8px;
+  border: 1px dashed rgba(248, 113, 113, 0.45);
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.16);
+  color: #fca5a5;
+  font: 500 0.7rem/1.35 "DM Mono", monospace;
+  cursor: pointer;
+}
+
+.preview-frame-error:hover,
+.preview-frame-error:focus-visible {
+  border-color: #fca5a5;
+  outline: 2px solid rgba(252, 165, 165, 0.28);
+  outline-offset: 2px;
 }
 
 .preview-frame span {

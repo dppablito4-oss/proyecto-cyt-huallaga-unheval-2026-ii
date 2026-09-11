@@ -39,6 +39,7 @@ def get_safe_config(settings: Settings = Depends(get_settings)):
     return {
         "OPENAI_VISION_MODEL": settings.OPENAI_VISION_MODEL,
         "OPENAI_TTS_MODEL": settings.OPENAI_TTS_MODEL,
+        "CALIBRATION_MODE": settings.CALIBRATION_MODE,
         "OPENAI_TTS_VOICE": settings.OPENAI_TTS_VOICE,
         "OPENAI_TTS_SPEED": settings.OPENAI_TTS_SPEED,
         "USE_LOCAL_WARNING_AUDIO": settings.USE_LOCAL_WARNING_AUDIO,

@@ -16,7 +16,7 @@ La versión actual implementa un flujo autónomo de extremo a extremo: captura d
 
 La captura permanece activa mientras el evento acumula contexto y mientras la IA o el TTS procesan el resultado. El análisis se ejecuta en un hilo independiente y se admite un solo evento activo a la vez. Para reducir el consumo de RAM, la cámara puede operar a su FPS normal, pero el buffer conserva por defecto solo **5 muestras por segundo durante 5 segundos** (máximo 25 frames antes de la selección final).
 
-Las Fases 1–10 de SIVARH v2 incorporan IDs persistentes, trayectoria acotada, `SceneState`, zonas, pose selectiva, asociación persona–objeto, razonamiento temporal y telemetría. `EventManager` ya no dispara por presencia. Un lanzamiento rápido o un abandono confirmado se resuelve en el edge; una bolsa perdida brevemente tras ser transportada crea un caso `UNCERTAIN` con contexto posterior para OpenAI. Los eventos confirmados rotan un catálogo WAV pre-generado con OpenAI TTS; los mensajes específicos usan TTS por API, se cachean y recurren al catálogo si falla la red.
+Las Fases 1–10 de SIVARH v2 incorporan IDs persistentes, trayectoria acotada, `SceneState`, zonas, pose selectiva, asociación persona–objeto, razonamiento temporal y telemetría. `EventManager` ya no dispara por presencia. Un lanzamiento rápido o un abandono confirmado se resuelve en el edge; una bolsa perdida brevemente tras ser transportada crea un caso `UNCERTAIN` con contexto posterior para OpenAI. Toda decisión `WARN` intenta primero OpenAI TTS por streaming y guarda el resultado en caché; si la API, la red o el altavoz streaming fallan, recurre al catálogo WAV pre-generado.
 
 ---
 
@@ -282,6 +282,7 @@ OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=onyx
 OPENAI_WARNING_CATALOG_DIR=data/audio/templates
 OPENAI_WARNING_CATALOG_PATTERN=openai_warning_*.wav
+CALIBRATION_MODE=False
 CAMERA_SOURCE=0
 DETECTOR_BACKEND=yoloe
 YOLO_MODEL=yoloe-26n-seg.pt
@@ -312,6 +313,7 @@ BUFFER_FPS=5
 ```
 > [!NOTE]
 > El sistema arranca y opera en **Modo Simulación / Standby** sin necesidad de API Key ni cámara conectada.
+> Para pruebas controladas dentro de una habitación puede usarse `CALIBRATION_MODE=True`: las zonas siguen siendo polígonos virtuales y una bolsa/objeto de prueba se evalúa como residuo simulado. Mantén este modo desactivado en producción.
 
 ---
 

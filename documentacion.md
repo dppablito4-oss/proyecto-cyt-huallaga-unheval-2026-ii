@@ -13,7 +13,7 @@
 
 **SIVARH** es un sistema inteligente de monitoreo y disuasión ambiental diseñado para operar en el borde (*Edge Computing*) en zonas críticas de las riberas del río Huallaga. Su objetivo fundamental es la **intervención preventiva pre-impacto**: detectar conductas de arrojo deliberado o negligente de residuos sólidos (*littering*) y emitir un estímulo auditivo disuasorio (*nudge* cognitivo) en tiempo real para provocar el desistimiento del infractor antes de que el desecho alcance el agua o la faja marginal.
 
-A diferencia de las cámaras de seguridad convencionales o los detectores pasivos, SIVARH integra visión local de vocabulario abierto (YOLOE-26n + ByteTrack + pose + zonificación), un motor espacio-temporal que reconoce transporte, liberación, lanzamiento y abandono, y un subsistema OpenAI TTS híbrido. Los casos confirmados usan un catálogo WAV pre-generado para respuesta inmediata; los mensajes contextuales se sintetizan por API, se cachean y recurren al catálogo si falla la conexión.
+A diferencia de las cámaras de seguridad convencionales o los detectores pasivos, SIVARH integra visión local de vocabulario abierto (YOLOE-26n + ByteTrack + pose + zonificación), un motor espacio-temporal que reconoce transporte, liberación, lanzamiento y abandono, y un subsistema OpenAI TTS híbrido. Toda decisión `WARN` solicita primero voz PCM por streaming a OpenAI y archiva el resultado; si la llamada o reproducción falla, recurre al catálogo WAV pre-generado.
 
 ---
 
@@ -70,7 +70,7 @@ Para superar estas fallas estructurales, SIVARH evolucionó hacia una solución 
    - Manipular un objeto (observación).
    - Soltar, abandonar o arrojar un residuo (infracción confirmada).
 10. **Motor de Decisión Gradual (`DecisionEngine`):** Clasificación en tres categorías operativas: `IGNORE`, `LOG_ONLY` y `WARN`.
-11. **Disuasión Auditiva OpenAI (`CachedWarningSpeechService` + `AudioOutput`):** Rotación inmediata de cuatro WAV pre-generados con OpenAI TTS. Si Vision propone un mensaje específico, el sistema usa TTS por API y guarda el resultado en caché; ante un fallo remoto vuelve al catálogo.
+11. **Disuasión Auditiva OpenAI (`CachedWarningSpeechService` + `AudioOutput`):** Cada `WARN` usa OpenAI TTS por streaming y guarda el mensaje en caché. Ante un fallo remoto rota cuatro WAV OpenAI pre-generados y conserva una plantilla local como último respaldo.
 12. **Doble Modo Operativo en Dashboard:**
     - *Modo Autónomo:* Monitoreo continuo desatendido con cooldown anti-saturación de 20 segundos.
     - *Modo Manual de Campo:* Herramienta controlada para calibración in situ, donde el operador dispara ráfagas de 4 capturas a intervalos fijos de 1.5s y valida la respuesta del modelo VLM.
@@ -277,6 +277,7 @@ OPENAI_TTS_RESPONSE_FORMAT=pcm
 OPENAI_TTS_STREAM_BUFFER_MS=400
 OPENAI_WARNING_CATALOG_DIR=data/audio/templates
 OPENAI_WARNING_CATALOG_PATTERN=openai_warning_*.wav
+CALIBRATION_MODE=False
 
 # Parámetros de Cámara y Video
 CAMERA_SOURCE=0

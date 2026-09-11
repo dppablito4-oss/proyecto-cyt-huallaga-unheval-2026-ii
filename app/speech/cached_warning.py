@@ -55,7 +55,6 @@ class CachedWarningSpeechService:
         should_synthesize = (
             self.tts_fallback_enabled
             and bool(dynamic_text)
-            and self._normalize(dynamic_text) != self._normalize(self.generic_message)
         )
 
         if should_synthesize:
