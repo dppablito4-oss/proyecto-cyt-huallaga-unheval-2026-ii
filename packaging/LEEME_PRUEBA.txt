@@ -1,0 +1,11 @@
+SIVARH - EJECUTABLE PARA PRUEBAS EN WINDOWS
+============================================
+
+1. Extrae completamente el archivo ZIP en una carpeta local.
+2. Conecta la cámara y el altavoz.
+3. Ejecuta INICIAR_SIVARH.bat o SIVARH.exe.
+4. Espera unos segundos: el dashboard se abrirá automáticamente.
+5. Si Windows pregunta por acceso a redes, permite únicamente redes privadas.
+
+El sistema guarda eventos, imágenes y audios dentro de la carpeta data.
+Para cerrar SIVARH, vuelve a la ventana del programa y presiona Ctrl+C.

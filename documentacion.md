@@ -197,11 +197,14 @@ SIVARH está construido bajo el principio de **separación estricta de responsab
 | **Selector de Cuadros** | [`app/vision/frame_selector.py`](app/vision/frame_selector.py) | Algoritmo de sub-muestreo temporal uniforme para extraer secuencias compactas. |
 | **Compresión** | [`app/vision/image_processor.py`](app/vision/image_processor.py) | Reescalado a resolución óptima, compresión JPEG al 70% y serialización Base64. |
 | **Cliente VLM** | [`app/ai/vision_client.py`](app/ai/vision_client.py) | Envío de secuencias a OpenAI Vision (GPT-5.6 Luna) y parseo estricto del esquema JSON. |
-| **Motor de Decisión** | [`app/events/decision_engine.py`](app/events/decision_engine.py) | Reglas de negocio para clasificar en `IGNORE`, `LOG_ONLY` o `WARN` según umbrales de confianza. |
+| **Motor de Decisión** | [`app/events/rules.py`](app/events/rules.py) | Reglas de negocio para clasificar en `IGNORE`, `LOG_ONLY` o `WARN` según umbrales de confianza. |
+| **Máquina de Estados** | [`app/events/object_state.py`](app/events/object_state.py) | Rastreo de estados de objetos (`CARRIED`, `RELEASED`, `STATIONARY`, `THROWN`). |
+| **Motor de Eventos** | [`app/events/engine.py`](app/events/engine.py) | Evaluación espacio-temporal continua de candidatos a evento de arrojo. |
 | **Síntesis de Voz** | [`app/speech/openai_tts.py`](app/speech/openai_tts.py) | OpenAI TTS dinámico en PCM y generación WAV; normaliza la cabecera de archivos recibidos por streaming. |
 | **Catálogo de Voz** | [`app/speech/cached_warning.py`](app/speech/cached_warning.py) | Caché por contenido, rotación de advertencias OpenAI pre-generadas y fallback local de emergencia. |
 | **Reproducción Local** | [`app/speech/audio_output.py`](app/speech/audio_output.py) | Emisión física del audio a través de los altavoces de la estación de borde. |
-| **Almacenamiento** | [`app/storage/database.py`](app/storage/database.py) | Base de datos SQLite para auditoría forense de eventos, imágenes clave y decisiones. |
+| **Generación de Reportes** | [`app/reports/pdf.py`](app/reports/pdf.py) | Compilación automática de reportes forenses en PDF con capturas y telemetría. |
+| **Almacenamiento** | [`app/storage/local_repository.py`](app/storage/local_repository.py) | Base de datos SQLite para auditoría forense de eventos, imágenes clave y decisiones. |
 | **Dashboard Frontend** | [`frontend/`](frontend/) | Interfaz gráfica web moderna con streaming en vivo, métricas, controles y visualizador de secuencias. |
 
 ---
@@ -232,29 +235,47 @@ La transición del resultado a una acción física sigue una lógica rigurosa:
 
 ## 6. Endpoints de la API REST y WebSockets
 
-### 6.1. Endpoints de Control y Estado
+### 6.1. Endpoints de Control, Estado y Espacio
 | Método | Ruta | Descripción |
 | :---: | :--- | :--- |
 | `GET` | `/api/status` | Retorna el estado global del sistema: cámara, tracks, FPS, métricas y logs recientes. |
-| `POST` | `/api/system/start` | Inicia la cámara y el worker de procesamiento de video. |
+| `GET` | `/api/metrics` | Retorna métricas de rendimiento: FPS de inferencia, uso de CPU, RAM y latencias. |
+| `GET` | `/api/health` | Sonda básica de disponibilidad (`{"status": "ok"}`). |
+| `GET` | `/api/scene` | Retorna ocupación de zonas, tracks activos y estado de objetos (`SceneState`). |
+| `GET` | `/api/scene/zones` | Retorna la calibración poligonal activa de la cámara. |
+| `PUT` | `/api/scene/zones` | Persiste y aplica nuevas zonas normalizadas sin reiniciar. |
+| `POST` | `/api/system/start` | Inicia la cámara y el worker de procesamiento continuo de video. |
 | `POST` | `/api/system/stop` | Detiene la cámara y el worker de video. |
+| `POST` | `/api/system/clear-logs` | Limpia el buffer de logs en memoria para el dashboard. |
 | `GET` | `/api/events` | Lista los eventos históricos almacenados en la base de datos SQLite. |
+| `GET` | `/api/events/statistics` | Calcula la tasa observada de desistimiento posterior al nudge. |
 | `GET` | `/api/events/{id}` | Retorna el detalle completo de un evento específico, incluyendo fotogramas clave. |
-| `GET` | `/api/config` | Obtiene la configuración actual del sistema en tiempo de ejecución. |
+| `GET` | `/api/events/{id}/frames/{index}` | Sirve un fotograma histórico del evento. |
+| `GET` | `/api/events/{id}/audio` | Sirve el audio TTS emitido para reproducirlo desde la galería. |
+| `GET` | `/api/reports/evidence.pdf` | Genera y descarga un reporte formal de evidencia en PDF con capturas y telemetría. |
+| `GET` | `/api/config` | Obtiene la configuración actual del sistema en tiempo de ejecución (sin credenciales). |
 | `PATCH`| `/api/config` | Modifica dinámicamente parámetros de configuración en caliente. |
+| `GET` | `/api/config/detection-classes` | Consulta las clases YOLOE y el estado de la actualización. |
+| `POST` | `/api/config/detection-classes` | Genera embeddings y activa nuevas clases en segundo plano. |
 
-### 6.2. Endpoints para Modo Manual y Depuración
+### 6.2. Endpoints de Cámara, Modo Manual y Depuración
 | Método | Ruta | Descripción |
 | :---: | :--- | :--- |
+| `GET` | `/api/cameras/status` | Parámetros técnicos, resolución y estado de enlace de la fuente activa. |
+| `POST` | `/api/cameras/switch` | Cambia dinámicamente la fuente de video (índice USB, archivo o RTSP). |
+| `GET` | `/api/cameras/stream` | Stream MJPEG continuo para visualización en vivo en el dashboard. |
+| `GET` | `/api/cameras/analysis-preview/{file}` | Sirve un fotograma JPEG capturado de la secuencia para inspección. |
 | `POST` | `/api/system/manual/start-recognition` | Inicia la ráfaga de 4 capturas automáticas espaciadas por 1.5s. |
 | `POST` | `/api/system/manual/send-images` | Envía la secuencia capturada a OpenAI Vision para su análisis y decisión. |
-| `POST` | `/api/debug/test-speech` | Prueba la síntesis de voz OpenAI TTS y la reproducción por el altavoz. |
-| `POST` | `/api/debug/test-local-warning` | Reproduce el siguiente WAV del catálogo OpenAI sin una llamada remota en ese instante. |
-| `POST` | `/api/debug/test-vision` | Prueba el cliente multimodal con una imagen estática de prueba. |
+| `POST` | `/api/system/manual/emit-alert` | Emite por altavoz la advertencia de voz tras validación humana en el modal. |
+| `POST` | `/api/debug/test-speech` | Prueba la síntesis de voz OpenAI TTS y la reproducción física por el altavoz. |
+| `POST` | `/api/debug/test-local-warning` | Reproduce el siguiente WAV del catálogo local sin consumir la API remota. |
+| `POST` | `/api/debug/generate-event-speech` | Solicita a Luna (`gpt-5.6`) un guion disuasorio contextual y lo reproduce vía TTS. |
+| `POST` | `/api/debug/test-analysis` | Ejecuta prueba del pipeline de análisis visual con fotogramas sintéticos o del buffer. |
 
 ### 6.3. Comunicación en Tiempo Real
-- **WebSocket `/ws/status`:** Envía pulsos de telemetría continuos (JSON) al frontend con: FPS real, número de personas y objetos detectados, ocupación por zona, tracks activos, estado de la IA y logs del sistema.
-- **Streaming de Video `/video_feed`:** Transmisión MJPEG en vivo con bounding boxes, zonas y overlays de depuración opcionales.
+- **WebSocket `/ws`:** Canal bidireccional reactivo que difunde el estado del sistema (`SystemState`) en formato JSON al frontend ante cada cambio de estado, métrica o log.
+- **Streaming de Video `/api/cameras/stream`:** Transmisión MJPEG en vivo con bounding boxes, zonas poligonales, IDs de tracks y overlays de depuración opcionales.
 
 ---
 
@@ -284,11 +305,13 @@ CAMERA_SOURCE=0
 CAMERA_FPS=30
 CAMERA_WIDTH=1280
 CAMERA_HEIGHT=720
+CAMERA_RECONNECT_SECONDS=2.0
 
 # Detector abierto YOLOE
 DETECTOR_BACKEND=yoloe
 YOLO_MODEL=yoloe-26n-seg.pt
 YOLO_PROMPT_EMBEDDINGS_PATH=data/models/sivarh-yoloe-26n-prompts.npz
+DYNAMIC_CLASSES_PATH=config/detection_classes.json
 DETECTION_CONFIDENCE=0.20
 DETECTION_CLASSES=person,plastic bag,trash bag,garbage bag,bottle,cup,food wrapper,cardboard box,backpack,handbag
 
@@ -297,6 +320,8 @@ BUFFER_SECONDS=6
 EVENT_CAPTURE_SECONDS=5.6
 SEQUENCE_FRAME_INTERVAL_SECONDS=0.8
 EVENT_COOLDOWN_SECONDS=20
+POST_ALERT_OBSERVATION_SECONDS=5.0
+POST_ALERT_POLL_SECONDS=0.25
 
 # Modo de Reconocimiento Manual (Pruebas de Campo)
 MANUAL_RECOGNITION_MODE=True
@@ -350,14 +375,42 @@ El sistema cuenta con una exhaustiva suite de pruebas automatizadas con **pytest
 
 La suite se ejecuta con `python -m pytest -q` e incluye detección abierta, pérdida temporal, lanzamiento confirmado, prioridad de TTS dinámico, caché y rotación del catálogo OpenAI.
 
+**Resultado actual:** 96 pruebas aprobadas.
+
 Las advertencias se regeneran con `python scripts/generate_openai_warning_catalog.py --overwrite`. La voz escuchada es sintética y generada por IA mediante OpenAI TTS, no corresponde a una persona humana.
 
 ---
 
-## 10. Validación de Campo Pendiente
+## 10. Análisis Crítico de Brechas y Limitaciones Operativas (Gaps del Proyecto)
 
-1. **Dataset supervisado del Huallaga:** conservar ejemplos positivos/negativos de las clases YOLOE para entrenar posteriormente un modelo cerrado de mayor precisión.
-2. **Calibración Ambiental en Terreno:**
-   - Ajuste de umbrales para condiciones de baja visibilidad (crepúsculo/noche) y filtrado de movimiento de vegetación y reflejos en el caudal del río Huallaga.
-3. **Seguridad y Despliegue en Hardware de Borde:**
-   - Incorporación de autenticación por tokens en la API REST y WebSocket para despliegues en dispositivos embebidos (NVIDIA Jetson / Raspberry Pi 5 con acelerador NPU).
+Para orientar las fases experimentales finales y sustentar con rigor científico el proyecto ante la UNHEVAL, se detallan a continuación los **puntos ciegos y debilidades estructurales** del sistema en su estado actual:
+
+### 10.1. Brechas en Visión por Computadora y Robustez Ambiental
+1. **Calibración Geométrica Estática:** Las coordenadas de `config/zones.json` son fijas y normalizadas (0.0 a 1.0). Cualquier desplazamiento del ángulo de la cámara o vibraciones mecánicas por tránsito de vehículos pesados en el Puente Huallaga descalibra las zonas de ribera y cauce. Falta una interfaz visual interactiva en el frontend que permita redefinir los vértices poligonales sobre el feed en vivo.
+2. **Sensibilidad a Fenómenos Meteorológicos y Ciclo Nocturno:** El río Huallaga experimenta variaciones climáticas extremas: lluvias torrenciales tropicales, niebla matinal densa y fuertes destellos lumínicos en el agua. Gran parte de los vertimientos ilícitos ocurren en horarios nocturnos. El pipeline actual opera únicamente sobre espacio de color RGB convencional sin pre-procesamiento adaptativo (CLAHE, filtrado de destellos) ni integración con cámaras térmicas o iluminadores IR.
+3. **Oclusiones Físicas y Multitudes en Barandas:** En sectores con alto flujo peatonal (accesos universitarios y barandas del malecón), los transeúntes caminan agrupados o apoyados en las barandillas. Esto provoca oclusiones parciales repetitivas que fragmentan la trayectoria continua de ByteTrack y disminuyen la visibilidad de los keypoints de muñeca en el estimador de pose.
+4. **Vocabulario de Residuos Restringido en Runtime:** Si bien YOLOE admite clases de vocabulario abierto, el archivo de embeddings compilado (`sivarh-yoloe-26n-prompts.npz`) contiene únicamente 10 categorías. Residuos voluminosos frecuentes en el río (costales de rafia, llantas usadas, desmontes de obra o restos de poda) no son detectados localmente si no se recalculan previamente sus vectores latentes.
+
+### 10.2. Brechas de Arquitectura y Concurrencia en Edge Computing
+1. **Concurrencia Monohilo de Eventos:** El pipeline admite la evaluación de un único evento de interés a la vez (`_active_event_thread`) para evitar la saturación de memoria RAM en el nodo de borde. En un escenario de descarte simultáneo por dos personas distantes en la misma escena, uno de los eventos no podrá ser analizado oportunamente.
+2. **Reconexión Automática Resiliente:** Ante microcortes de red PoE en cámaras IP (RTSP) o desconexiones momentáneas en el bus USB, el hilo de captura atrapa la excepción pero carece de un bucle de reintento automático con retroceso exponencial (*exponential backoff*), requiriendo un cambio manual de fuente desde el panel.
+3. **Ciclo de Vida y Purga de Almacenamiento Local:** Los fotogramas extraídos (`data/frames/`) y los audios generados (`data/audio/`) se acumulan progresivamente en disco. En un despliegue continuo 24/7 sobre memoria flash o tarjetas SD, el medio se saturará a corto plazo en ausencia de una política automática de retención y purga (política LRU/TTL).
+
+### 10.3. Brechas en Ciberseguridad y Despliegue de Red
+1. **Ausencia de Autenticación y Autorización (Zero-Auth):** Tanto los endpoints REST de control (`/api/system/start`, `/api/system/stop`, `/api/config`) como el canal WebSocket `/ws` carecen de autenticación mediante tokens (JWT / API Key). En una red de campus o municipal, cualquier dispositivo conectado a la misma subred puede manipular la operación del sistema.
+2. **Exposición de Secretos en Campo:** Las credenciales de acceso a la nube (`OPENAI_API_KEY`) residen en texto claro dentro del archivo `.env`. En un punto de monitoreo físico montado en la vía pública, la sustracción del hardware expondría dichas claves si el almacenamiento no se encuentra debidamente cifrado (LUKS / TPM).
+3. **Transporte en Claro:** La comunicación local por defecto se realiza mediante HTTP y WS sin capa TLS/SSL, vulnerable a intercepciones intermedias (*man-in-the-middle*).
+
+### 10.4. Brechas en Metodología Científica y Validación Experimental (CyT)
+1. **Inexistencia de un Dataset Benchmark Específico del Huallaga:** El proyecto aún no cuenta con un corpus local de videos reales etiquetados cuadro a cuadro (formato MOT / COCO) con anotaciones de verdad de terreno (*ground truth*). Ello impide calcular métricas estandarizadas de la literatura ($mAP@50$, $MOTA$, $IDF1$) con significancia estadística rigurosa.
+2. **Evaluación Automática del Desistimiento (*Impacto del Nudge*):** La hipótesis central del proyecto radica en que el estímulo disuasorio provoca la interrupción del acto de arrojo. Sin embargo, el sistema emite el sonido pero no monitorea automáticamente en los 5 segundos posteriores si el peatón retuvo el residuo o lo recogió del suelo, imposibilitando el cálculo cuantitativo automatizado de la tasa de efectividad conductual en la base de datos.
+
+### 10.5. Brechas cerradas en la implementación actual
+
+Desde septiembre de 2026, los puntos 10.1.1, 10.1.4, 10.2.2 y 10.4.2 se consideran implementados:
+
+1. El dashboard permite dibujar, deshacer, limpiar y guardar polígonos normalizados sin reiniciar el servidor.
+2. YOLOE puede recibir nuevas clases desde el panel; los embeddings se preparan en segundo plano y se conservan para el siguiente arranque.
+3. El worker mantiene la interfaz activa y reintenta abrir cámaras USB/RTSP cada dos segundos. Los archivos de video se rebobinan automáticamente.
+4. Después de una advertencia autónoma, el sistema observa el objeto durante cinco segundos y registra `desistimiento_confirmado` como columna binaria de SQLite.
+5. La galería de incidencias permite revisar fotogramas, veredictos, diagnóstico, resultado del nudge y audio histórico desde el navegador.

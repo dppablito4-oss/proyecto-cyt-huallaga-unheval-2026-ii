@@ -8,6 +8,10 @@
 document.addEventListener('DOMContentLoaded', () => {
   console.log('Inicializando interfaz simplificada de SIVARH...');
 
+  ZoneCalibrator.init();
+  EventHistory.init();
+  DetectorConfig.init();
+
   // 1. Instanciar y conectar el cliente WebSocket para actualizaciones reactivas continuas
   const ws = new WSClient((payload) => {
     if (payload.type === 'system_state') {

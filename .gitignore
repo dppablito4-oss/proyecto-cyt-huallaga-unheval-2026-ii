@@ -25,6 +25,10 @@ data/audio/*
 data/runtime-*.log
 data/test_videos/*
 !data/test_videos/.gitkeep
+config/detection_classes.json
+data/models/*-prompts.npz
+build/
+release/
 
 # SQLite database
 *.db

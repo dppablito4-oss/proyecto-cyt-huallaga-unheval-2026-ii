@@ -31,6 +31,10 @@ class ConfigUpdateModel(BaseModel):
     ai_warning_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Umbral de confianza para emitir advertencia.")
 
 
+class DetectionClassesRequest(BaseModel):
+    classes: list[str] = Field(..., min_length=1, max_length=40)
+
+
 @router.get("", summary="Consultar configuración no sensible del sistema")
 def get_safe_config(settings: Settings = Depends(get_settings)):
     """
@@ -51,6 +55,7 @@ def get_safe_config(settings: Settings = Depends(get_settings)):
         "CAMERA_SOURCE": settings.CAMERA_SOURCE,
         "CAMERA_ID": settings.CAMERA_ID,
         "CAMERA_FPS": settings.CAMERA_FPS,
+        "CAMERA_RECONNECT_SECONDS": settings.CAMERA_RECONNECT_SECONDS,
         "DETECTOR_BACKEND": settings.DETECTOR_BACKEND,
         "YOLO_MODEL": settings.YOLO_MODEL,
         "YOLO_PROMPT_EMBEDDINGS_PATH": str(settings.YOLO_PROMPT_EMBEDDINGS_PATH),
@@ -118,6 +123,7 @@ def get_safe_config(settings: Settings = Depends(get_settings)):
         "EVENT_CAPTURE_SECONDS": settings.EVENT_CAPTURE_SECONDS,
         "SEQUENCE_FRAME_INTERVAL_SECONDS": settings.SEQUENCE_FRAME_INTERVAL_SECONDS,
         "EVENT_COOLDOWN_SECONDS": settings.EVENT_COOLDOWN_SECONDS,
+        "POST_ALERT_OBSERVATION_SECONDS": settings.POST_ALERT_OBSERVATION_SECONDS,
         "FRAMES_PER_ANALYSIS": settings.FRAMES_PER_ANALYSIS,
         "JPEG_QUALITY": settings.JPEG_QUALITY,
         "AI_WARNING_THRESHOLD": settings.AI_WARNING_THRESHOLD
@@ -141,3 +147,22 @@ def update_config(update_data: ConfigUpdateModel):
         "message": "Configuración actualizada correctamente." if applied else "No se enviaron cambios.",
         "updated": applied,
     }
+
+
+@router.get("/detection-classes", summary="Consultar vocabulario dinámico YOLOE")
+def get_detection_classes():
+    from app.main import pipeline_worker
+
+    return pipeline_worker.detection_class_status
+
+
+@router.post("/detection-classes", status_code=202, summary="Actualizar vocabulario YOLOE")
+def update_detection_classes(payload: DetectionClassesRequest):
+    from app.main import pipeline_worker
+
+    accepted, message = pipeline_worker.start_detection_class_update(payload.classes)
+    if not accepted:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=409, detail=message)
+    return {"accepted": True, "message": message}

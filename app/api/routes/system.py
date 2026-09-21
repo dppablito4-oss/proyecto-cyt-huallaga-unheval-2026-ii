@@ -115,6 +115,9 @@ def emit_manual_alert(payload: ManualAlertRequest):
 
     system_state.mark_alert_emitted()
     system_state.add_log("AUDIO", "[AUDIO] Advertencia manual emitida correctamente.")
+    from app.main import pipeline_worker
+
+    pipeline_worker.record_manual_alert_audio(generated)
     return {
         "accepted": True,
         "message": "Advertencia emitida correctamente.",

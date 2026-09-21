@@ -102,7 +102,7 @@ def camera_stream():
 @router.get("/analysis-preview/{filename}", summary="Ver un fotograma preparado para la IA")
 def analysis_preview(filename: str):
     """Entrega un JPEG de la secuencia seleccionada, sin permitir rutas arbitrarias."""
-    allowed_prefixes = ("ai-preview-", "auto-preview-", "manual-preview-")
+    allowed_prefixes = ("ai-preview-", "auto-preview-", "manual-preview-", "event-")
     if Path(filename).name != filename or not filename.startswith(allowed_prefixes):
         raise HTTPException(status_code=404, detail="Fotograma no encontrado.")
 

@@ -15,12 +15,21 @@ Flujo de invocación:
 """
 
 import os
+import sys
 from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from dotenv import load_dotenv
 
-# Ruta absoluta al archivo .env ubicado en la raíz del proyecto
-env_path = Path(__file__).resolve().parent.parent / ".env"
+# En desarrollo apunta al repositorio. En el ejecutable apunta a la carpeta
+# que contiene SIVARH.exe para que todos los recursos sigan siendo portables.
+PROJECT_ROOT = (
+    Path(sys.executable).resolve().parent
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent.parent
+)
+
+# Ruta absoluta al archivo .env ubicado junto al proyecto o al ejecutable.
+env_path = PROJECT_ROOT / ".env"
 
 # Cargar las variables de entorno definidas en el archivo .env al entorno de Python
 load_dotenv(dotenv_path=env_path)
@@ -82,7 +91,7 @@ class Settings(BaseModel):
         os.getenv(
             "LOCAL_WARNING_AUDIO_PATH",
             str(
-                Path(__file__).resolve().parent.parent
+                PROJECT_ROOT
                 / "data"
                 / "audio"
                 / "templates"
@@ -93,7 +102,7 @@ class Settings(BaseModel):
     OPENAI_WARNING_CATALOG_DIR: Path = Path(
         os.getenv(
             "OPENAI_WARNING_CATALOG_DIR",
-            str(Path(__file__).resolve().parent.parent / "data" / "audio" / "templates"),
+            str(PROJECT_ROOT / "data" / "audio" / "templates"),
         )
     )
     OPENAI_WARNING_CATALOG_PATTERN: str = os.getenv(
@@ -102,7 +111,7 @@ class Settings(BaseModel):
     TTS_CACHE_DIR: Path = Path(
         os.getenv(
             "TTS_CACHE_DIR",
-            str(Path(__file__).resolve().parent.parent / "data" / "audio" / "cache"),
+            str(PROJECT_ROOT / "data" / "audio" / "cache"),
         )
     )
 
@@ -116,6 +125,9 @@ class Settings(BaseModel):
     CAMERA_FPS: int = int(os.getenv("CAMERA_FPS", "30"))
     CAMERA_WIDTH: int = int(os.getenv("CAMERA_WIDTH", "1280"))
     CAMERA_HEIGHT: int = int(os.getenv("CAMERA_HEIGHT", "720"))
+    CAMERA_RECONNECT_SECONDS: float = Field(
+        default=float(os.getenv("CAMERA_RECONNECT_SECONDS", "2.0")), gt=0.0
+    )
 
     # ==========================================
     # 4. Detector Local de Personas (YOLO)
@@ -127,11 +139,17 @@ class Settings(BaseModel):
         os.getenv(
             "YOLO_PROMPT_EMBEDDINGS_PATH",
             str(
-                Path(__file__).resolve().parent.parent
+                PROJECT_ROOT
                 / "data"
                 / "models"
                 / "sivarh-yoloe-26n-prompts.npz"
             ),
+        )
+    )
+    DYNAMIC_CLASSES_PATH: Path = Path(
+        os.getenv(
+            "DYNAMIC_CLASSES_PATH",
+            str(PROJECT_ROOT / "config" / "detection_classes.json"),
         )
     )
     YOLO_IMGSZ: int = Field(default=int(os.getenv("YOLO_IMGSZ", "640")), ge=160)
@@ -188,7 +206,7 @@ class Settings(BaseModel):
     ZONE_CONFIG_PATH: Path = Path(
         os.getenv(
             "ZONE_CONFIG_PATH",
-            str(Path(__file__).resolve().parent.parent / "config" / "zones.json"),
+            str(PROJECT_ROOT / "config" / "zones.json"),
         )
     )
     VISION_DEBUG_OVERLAY: bool = os.getenv("VISION_DEBUG_OVERLAY", "True").lower() in (
@@ -244,7 +262,7 @@ class Settings(BaseModel):
         os.getenv(
             "POSE_MODEL_PATH",
             str(
-                Path(__file__).resolve().parent.parent
+                PROJECT_ROOT
                 / "data"
                 / "models"
                 / "pose_landmarker_lite.task"
@@ -396,6 +414,16 @@ class Settings(BaseModel):
     SEQUENCE_FRAME_INTERVAL_SECONDS: float = float(os.getenv("SEQUENCE_FRAME_INTERVAL_SECONDS", "1"))
     # EVENT_COOLDOWN_SECONDS: Tiempo de espera en `app.events.cooldown.CooldownManager` para evitar llamadas repetidas
     EVENT_COOLDOWN_SECONDS: int = int(os.getenv("EVENT_COOLDOWN_SECONDS", "20"))
+    POST_ALERT_OBSERVATION_SECONDS: float = Field(
+        default=float(os.getenv("POST_ALERT_OBSERVATION_SECONDS", "5.0")),
+        ge=1.0,
+        le=15.0,
+    )
+    POST_ALERT_POLL_SECONDS: float = Field(
+        default=float(os.getenv("POST_ALERT_POLL_SECONDS", "0.25")),
+        gt=0.0,
+        le=2.0,
+    )
     # Modo de reconocimiento manual (desactivado por defecto para monitoreo autónomo).
     MANUAL_RECOGNITION_MODE: bool = os.getenv("MANUAL_RECOGNITION_MODE", "False").lower() in ("true", "1", "yes")
     MANUAL_CAPTURE_FRAMES: int = int(os.getenv("MANUAL_CAPTURE_FRAMES", "4"))
@@ -419,7 +447,7 @@ class Settings(BaseModel):
     # ==========================================
     # 8. Rutas del Sistema de Archivos
     # ==========================================
-    BASE_DIR: Path = Path(__file__).resolve().parent.parent
+    BASE_DIR: Path = PROJECT_ROOT
     DATA_DIR: Path = BASE_DIR / "data"
     PROMPTS_DIR: Path = BASE_DIR / "prompts"
     FRONTEND_DIR: Path = BASE_DIR / "frontend"

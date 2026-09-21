@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Protocol, Sequence
@@ -67,37 +68,49 @@ class LocalDetector:
         self.model = None
         self._initialized = False
         self._unknown_classes_reported: tuple[str, ...] = ()
+        self._lock = threading.RLock()
 
     def initialize(self) -> bool:
         """Carga YOLO de forma perezosa y permite degradación segura."""
-        if self._initialized:
-            return True
-        try:
-            if self.backend == "yoloe":
-                from ultralytics import YOLOE
+        with self._lock:
+            if self._initialized:
+                return True
+            try:
+                if self.backend == "yoloe":
+                    from ultralytics import YOLOE
 
-                self.model = YOLOE(self.model_name)
-                self._configure_open_vocabulary()
-            else:
-                from ultralytics import YOLO
+                    self.model = YOLOE(self.model_name)
+                    self._configure_open_vocabulary()
+                else:
+                    from ultralytics import YOLO
 
-                self.model = YOLO(self.model_name)
-            self._initialized = True
-            self._resolve_class_filter()
-            logger.info(
-                "Detector %s '%s' inicializado para clases: %s.",
-                self.backend.upper(),
-                self.model_name,
-                ", ".join(self.monitored_classes),
-            )
-            return True
-        except Exception as exc:
-            logger.warning(
-                "No se pudo cargar el modelo YOLO '%s': %s. Operando sin detecciones.",
-                self.model_name,
-                exc,
-            )
-            return False
+                    self.model = YOLO(self.model_name)
+                self._initialized = True
+                self._resolve_class_filter()
+                logger.info(
+                    "Detector %s '%s' inicializado para clases: %s.",
+                    self.backend.upper(),
+                    self.model_name,
+                    ", ".join(self.monitored_classes),
+                )
+                return True
+            except Exception as exc:
+                logger.warning(
+                    "No se pudo cargar el modelo YOLO '%s': %s. Operando sin detecciones.",
+                    self.model_name,
+                    exc,
+                )
+                return False
+
+    def save_prompt_embeddings(self, output_path: Path | str) -> Path:
+        """Guarda los embeddings del vocabulario activo para el próximo arranque."""
+        with self._lock:
+            if self.backend != "yoloe" or self.model is None or not self._initialized:
+                raise RuntimeError("El detector YOLOE debe estar inicializado.")
+            output = Path(output_path)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            saved = self.model.save_prompt_embeddings(output)
+            return Path(saved or output)
 
     def _configure_open_vocabulary(self) -> None:
         """Carga prompts precomputados; sólo los genera si el recurso aún no existe."""
@@ -157,18 +170,18 @@ class LocalDetector:
         if not self._initialized or self.model is None:
             return DetectionFrame(timestamp=captured_at)
 
-        class_ids, class_names = self._resolve_class_filter()
-        if not class_ids:
-            return DetectionFrame(timestamp=captured_at)
-
         try:
-            results = self.model(
-                frame,
-                classes=class_ids,
-                conf=self.confidence_threshold,
-                imgsz=self.image_size,
-                verbose=False,
-            )
+            with self._lock:
+                class_ids, class_names = self._resolve_class_filter()
+                if not class_ids:
+                    return DetectionFrame(timestamp=captured_at)
+                results = self.model(
+                    frame,
+                    classes=class_ids,
+                    conf=self.confidence_threshold,
+                    imgsz=self.image_size,
+                    verbose=False,
+                )
             detections: list[Detection] = []
             for result in results:
                 for box in result.boxes:

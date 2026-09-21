@@ -20,6 +20,7 @@ Flujo de invocación:
 
 import time
 import logging
+import os
 import threading
 import uuid
 from datetime import datetime
@@ -31,6 +32,11 @@ from app.camera.base import CameraSource
 from app.camera.usb_camera import UsbCamera
 from app.camera.video_file import VideoFileCamera
 from app.vision.detector import LocalDetector
+from app.vision.class_config import (
+    load_detection_classes,
+    normalize_detection_classes,
+    save_detection_classes,
+)
 from app.vision.frame_buffer import FrameBuffer
 from app.vision.frame_selector import EventKeyframeSelector, FrameSelector
 from app.vision.image_processor import ImageProcessor
@@ -95,14 +101,24 @@ class VideoPipelineWorker:
         self._camera: Optional[CameraSource] = None
 
         # Componentes del pipeline
+        dynamic_classes_path = settings.DYNAMIC_CLASSES_PATH
+        if not dynamic_classes_path.is_absolute():
+            dynamic_classes_path = settings.BASE_DIR / dynamic_classes_path
+        self._dynamic_classes_path = dynamic_classes_path
+        active_classes = load_detection_classes(
+            self._dynamic_classes_path,
+            settings.DETECTION_CLASSES,
+        )
+        settings.DETECTION_CLASSES = active_classes
         prompt_embeddings_path = settings.YOLO_PROMPT_EMBEDDINGS_PATH
         if not prompt_embeddings_path.is_absolute():
             prompt_embeddings_path = settings.BASE_DIR / prompt_embeddings_path
+        self._prompt_embeddings_path = prompt_embeddings_path
         self._detector = LocalDetector(
             model_name=settings.YOLO_MODEL,
             confidence_threshold=settings.DETECTION_CONFIDENCE,
             person_confidence_threshold=settings.YOLO_PERSON_CONFIDENCE,
-            monitored_classes=settings.DETECTION_CLASSES,
+            monitored_classes=active_classes,
             image_size=settings.YOLO_IMGSZ,
             backend=settings.DETECTOR_BACKEND,
             prompt_embeddings_path=prompt_embeddings_path,
@@ -143,6 +159,7 @@ class VideoPipelineWorker:
         zone_config_path = settings.ZONE_CONFIG_PATH
         if not zone_config_path.is_absolute():
             zone_config_path = settings.BASE_DIR / zone_config_path
+        self._zone_config_path = zone_config_path
         self._zone_manager = ZoneManager.from_json(zone_config_path, settings.CAMERA_ID)
         self._debug_overlay = VisionDebugOverlay(enabled=settings.VISION_DEBUG_OVERLAY)
         self._scene_state = SceneState(camera_id=settings.CAMERA_ID)
@@ -254,6 +271,15 @@ class VideoPipelineWorker:
         self._manual_jpeg_quality = settings.JPEG_QUALITY
         self._manual_lock = threading.Lock()
         self._runtime_config_lock = threading.Lock()
+        self._pending_manual_event_id: Optional[str] = None
+        self._detector_lock = threading.RLock()
+        self._class_update_lock = threading.Lock()
+        self._class_update_thread: Optional[threading.Thread] = None
+        self._class_update_status = {
+            "status": "idle",
+            "message": "Vocabulario listo.",
+            "classes": list(active_classes),
+        }
 
     @property
     def current_frame(self):
@@ -266,6 +292,15 @@ class VideoPipelineWorker:
         """Devuelve una copia coherente del estado espacial más reciente."""
         with self._scene_lock:
             return self._scene_state.model_copy(deep=True)
+
+    @property
+    def zone_definitions(self):
+        return self._zone_manager.definitions()
+
+    @property
+    def detection_class_status(self) -> dict:
+        with self._class_update_lock:
+            return dict(self._class_update_status)
 
     def start(self) -> bool:
         """Arranca el hilo de captura continua."""
@@ -480,6 +515,144 @@ class VideoPipelineWorker:
             system_state.add_log("INFO", f"Configuración operativa actualizada: {summary}.")
         return applied
 
+    def update_zones(self, zones) -> list:
+        """Guarda y activa polígonos normalizados sin reiniciar el pipeline."""
+        ZoneManager.save_json(
+            self._zone_config_path,
+            settings.CAMERA_ID,
+            zones,
+        )
+        self._zone_manager.replace(zones)
+        system_state.add_log(
+            "INFO",
+            f"[ZONAS] {len(zones)} polígonos calibrados y activados en caliente.",
+        )
+        return self._zone_manager.definitions()
+
+    def record_manual_alert_audio(self, audio_path: str) -> bool:
+        """Vincula el audio confirmado por el operador con su evento manual."""
+        event_id = self._pending_manual_event_id
+        if not event_id:
+            return False
+        event = self._repository.get_by_id(event_id)
+        if event is None:
+            return False
+        event.metrics["audio_source"] = "openai_tts_manual"
+        event.metrics["audio_path"] = str(audio_path)
+        saved = self._repository.save(event)
+        if saved:
+            self._pending_manual_event_id = None
+        return saved
+
+    def start_detection_class_update(self, classes) -> tuple[bool, str]:
+        """Genera un detector YOLOE nuevo en segundo plano y lo intercambia al final."""
+        try:
+            normalized = normalize_detection_classes(classes)
+        except ValueError as exc:
+            return False, str(exc)
+        if settings.DETECTOR_BACKEND != "yoloe":
+            return False, "Las clases dinámicas requieren DETECTOR_BACKEND=yoloe."
+        if self._class_update_thread is not None and self._class_update_thread.is_alive():
+            return False, "Ya hay una actualización de clases en curso."
+
+        with self._class_update_lock:
+            self._class_update_status = {
+                "status": "updating",
+                "message": "Generando embeddings CLIP sin detener la cámara...",
+                "classes": list(normalized),
+            }
+        self._class_update_thread = threading.Thread(
+            target=self._update_detection_classes,
+            args=(normalized,),
+            name="YOLOEDynamicClasses",
+            daemon=True,
+        )
+        self._class_update_thread.start()
+        return True, "Actualización iniciada en segundo plano."
+
+    def _update_detection_classes(self, classes: tuple[str, ...]) -> None:
+        try:
+            detector = LocalDetector(
+                model_name=settings.YOLO_MODEL,
+                confidence_threshold=settings.DETECTION_CONFIDENCE,
+                person_confidence_threshold=settings.YOLO_PERSON_CONFIDENCE,
+                monitored_classes=classes,
+                image_size=settings.YOLO_IMGSZ,
+                backend="yoloe",
+                prompt_embeddings_path=None,
+            )
+            if not detector.initialize():
+                raise RuntimeError("YOLOE no pudo inicializar el nuevo vocabulario.")
+            temporary_embeddings = self._prompt_embeddings_path.with_name(
+                f"{self._prompt_embeddings_path.stem}.tmp{self._prompt_embeddings_path.suffix}"
+            )
+            saved_embeddings = detector.save_prompt_embeddings(temporary_embeddings)
+            os.replace(saved_embeddings, self._prompt_embeddings_path)
+            save_detection_classes(self._dynamic_classes_path, classes)
+            with self._detector_lock:
+                self._detector = detector
+                settings.DETECTION_CLASSES = classes
+            with self._class_update_lock:
+                self._class_update_status = {
+                    "status": "ready",
+                    "message": "Clases activadas y guardadas para el próximo arranque.",
+                    "classes": list(classes),
+                }
+            system_state.add_log(
+                "SUCCESS",
+                "[VISIÓN] Vocabulario YOLOE actualizado: " + ", ".join(classes),
+            )
+        except Exception as exc:
+            logger.exception("No se pudo actualizar el vocabulario YOLOE: %s", exc)
+            with self._class_update_lock:
+                self._class_update_status = {
+                    "status": "error",
+                    "message": str(exc),
+                    "classes": list(settings.DETECTION_CLASSES),
+                }
+            system_state.add_log("ERROR", f"[VISIÓN] Error actualizando clases: {exc}")
+
+    def _open_camera_with_retry(self) -> bool:
+        """Mantiene el worker vivo mientras recupera una fuente desconectada."""
+        attempt = 0
+        while not self._stop_event.is_set():
+            attempt += 1
+            camera = _create_camera_source()
+            try:
+                opened = camera.open()
+            except Exception as exc:
+                logger.warning("Error abriendo cámara: %s", exc)
+                opened = False
+            if opened:
+                self._camera = camera
+                system_state.set_camera_status(
+                    connected=True,
+                    source=settings.CAMERA_SOURCE,
+                    fps=0.0,
+                )
+                system_state.add_log(
+                    "SUCCESS",
+                    f"[CÁMARA] Señal conectada tras {attempt} intento(s).",
+                )
+                logger.info("Cámara abierta: %s", camera.get_metadata())
+                return True
+            camera.close()
+            self._camera = None
+            system_state.set_camera_status(
+                connected=False,
+                source=settings.CAMERA_SOURCE,
+                fps=0.0,
+            )
+            if attempt == 1 or attempt % 5 == 0:
+                system_state.add_log(
+                    "WARNING",
+                    f"[CÁMARA] Sin señal. Reintento automático #{attempt} en "
+                    f"{settings.CAMERA_RECONNECT_SECONDS:g}s.",
+                )
+            if self._stop_event.wait(settings.CAMERA_RECONNECT_SECONDS):
+                break
+        return False
+
     def _update_tracking(self, detection, frame, timestamp: datetime):
         """Actualiza tracking, zonas y SceneState para el frame actual."""
         try:
@@ -594,15 +767,9 @@ class VideoPipelineWorker:
         """
         Bucle principal de captura y procesamiento. Ejecuta en hilo de fondo.
         """
-        # 1. Abrir la cámara
-        self._camera = _create_camera_source()
-        if not self._camera.open():
-            logger.error("No se pudo abrir la cámara. Worker detenido.")
-            system_state.set_camera_status(connected=False, source=settings.CAMERA_SOURCE, fps=0.0)
+        # 1. Abrir la cámara; si está desconectada, conservar el worker y reintentar.
+        if not self._open_camera_with_retry():
             return
-
-        system_state.set_camera_status(connected=True, source=settings.CAMERA_SOURCE, fps=0.0)
-        logger.info(f"Cámara abierta: {self._camera.get_metadata()}")
 
         # 2. Inicializar el detector YOLO
         self._detector.initialize()
@@ -614,10 +781,24 @@ class VideoPipelineWorker:
 
         # 3. Bucle de captura continua
         while not self._stop_event.is_set():
-            ret, frame = self._camera.read()
+            try:
+                ret, frame = self._camera.read() if self._camera is not None else (False, None)
+            except Exception as exc:
+                logger.warning("La lectura de cámara lanzó una excepción: %s", exc)
+                ret, frame = False, None
             if not ret or frame is None:
-                logger.warning("Fallo de lectura de cámara. Reintentando...")
-                time.sleep(0.1)
+                logger.warning("Se perdió la señal de cámara; iniciando reconexión.")
+                system_state.add_log(
+                    "WARNING",
+                    "[CÁMARA] Señal perdida. El monitoreo intentará recuperarla automáticamente.",
+                )
+                if self._camera is not None:
+                    self._camera.close()
+                    self._camera = None
+                if not self._open_camera_with_retry():
+                    break
+                frame_count = 0
+                fps_start_time = time.perf_counter()
                 continue
 
             frame_timestamp = datetime.now()
@@ -646,7 +827,9 @@ class VideoPipelineWorker:
             candidate = None
             if self._detection_limiter.is_due():
                 detector_started = time.perf_counter()
-                detection_frame = self._detector.detect(frame, timestamp=frame_timestamp)
+                with self._detector_lock:
+                    detector = self._detector
+                detection_frame = detector.detect(frame, timestamp=frame_timestamp)
                 self._metrics.record_stage(
                     "detector",
                     elapsed_ms=(time.perf_counter() - detector_started) * 1000.0,
@@ -736,6 +919,66 @@ class VideoPipelineWorker:
             self._camera.close()
             self._camera = None
 
+    def _persist_event_frames(self, event: EventModel, jpeg_frames: list[bytes]) -> list[str]:
+        """Archiva evidencia estable y devuelve URLs inmediatas para el dashboard."""
+        if not jpeg_frames:
+            event.capture.frame_paths = []
+            return []
+        frames_dir = settings.DATA_DIR / "frames"
+        frames_dir.mkdir(parents=True, exist_ok=True)
+        paths = []
+        preview_urls = []
+        for index, jpeg_bytes in enumerate(jpeg_frames, start=1):
+            filename = f"event-{event.id}-{index}.jpg"
+            path = frames_dir / filename
+            path.write_bytes(jpeg_bytes)
+            paths.append(str(path.resolve()))
+            preview_urls.append(f"/api/cameras/analysis-preview/{filename}")
+        event.capture.frame_paths = paths
+        system_state.set_analysis_preview_urls(preview_urls)
+        return preview_urls
+
+    def _observe_post_alert(self, event: EventModel) -> None:
+        """Mide si el objeto liberado vuelve a estado CARRIED tras el nudge."""
+        if event.object_track_id is None:
+            event.post_alert_outcome = "NOT_TRACKED"
+            return
+        started = time.monotonic()
+        deadline = started + settings.POST_ALERT_OBSERVATION_SECONDS
+        last_state = None
+        saw_object = False
+        while time.monotonic() < deadline and not self._stop_event.is_set():
+            snapshot = self.current_scene.object_states.get(event.object_track_id)
+            if snapshot is not None:
+                saw_object = True
+                last_state = snapshot.state.value
+                if last_state == "CARRIED":
+                    event.desistimiento_confirmado = True
+                    event.post_alert_outcome = "RETRIEVED"
+                    break
+            self._stop_event.wait(settings.POST_ALERT_POLL_SECONDS)
+        else:
+            event.desistimiento_confirmado = False
+            if last_state in {"STATIONARY", "ABANDONED", "RELEASED", "MOVING"}:
+                event.post_alert_outcome = "REMAINS"
+            elif last_state == "LOST" or not saw_object:
+                event.post_alert_outcome = "LOST_OR_NOT_VISIBLE"
+            else:
+                event.post_alert_outcome = "NOT_RETRIEVED"
+
+        event.post_alert_observed_at = datetime.now()
+        event.post_alert_observation_seconds = round(time.monotonic() - started, 3)
+        event.metrics["desistimiento_confirmado"] = event.desistimiento_confirmado
+        event.metrics["post_alert_outcome"] = event.post_alert_outcome
+        level = "SUCCESS" if event.desistimiento_confirmado else "WARNING"
+        message = (
+            "desistimiento confirmado: el residuo volvió a ser recogido"
+            if event.desistimiento_confirmado
+            else f"sin desistimiento confirmado ({event.post_alert_outcome})"
+        )
+        system_state.add_log("NUDGE", f"[NUDGE] {message}.")
+        logger.log(logging.INFO if level == "SUCCESS" else logging.WARNING, message)
+
     def _process_event(self, event, manual_jpeg_frames=None, is_manual: bool = False) -> None:
         """
         Procesa un evento completo: captura → selección → compresión → IA → decisión → voz.
@@ -784,15 +1027,6 @@ class VideoPipelineWorker:
                     "SEQUENCE",
                     f"[SECUENCIA] {len(jpeg_frames)} keyframes seleccionados alrededor de la liberación.",
                 )
-                if jpeg_frames:
-                    preview_dir = settings.DATA_DIR / "frames"
-                    preview_dir.mkdir(parents=True, exist_ok=True)
-                    preview_urls = []
-                    for idx, j_bytes in enumerate(jpeg_frames):
-                        p_name = f"auto-preview-{event.id[:8]}-{idx + 1}.jpg"
-                        (preview_dir / p_name).write_bytes(j_bytes)
-                        preview_urls.append(f"/api/cameras/analysis-preview/{p_name}")
-                    system_state.set_analysis_preview_urls(preview_urls)
             elif not is_manual:
                 all_buffered = self._frame_buffer.get_all_frames()
                 if all_buffered:
@@ -804,11 +1038,9 @@ class VideoPipelineWorker:
                     with self._runtime_config_lock:
                         j_bytes = self._image_processor.compress_jpeg(nearest_frame)
                         jpeg_quality = self._image_processor.jpeg_quality
-                    preview_dir = settings.DATA_DIR / "frames"
-                    preview_dir.mkdir(parents=True, exist_ok=True)
-                    p_name = f"auto-preview-{event.id[:8]}-1.jpg"
-                    (preview_dir / p_name).write_bytes(j_bytes)
-                    system_state.set_analysis_preview_urls([f"/api/cameras/analysis-preview/{p_name}"])
+                    jpeg_frames = [j_bytes]
+
+            self._persist_event_frames(event, jpeg_frames)
 
             # 4. Actualizar metadata de captura
             event.capture.total_frames = len(jpeg_frames)
@@ -916,6 +1148,7 @@ class VideoPipelineWorker:
                 playback = self._warning_speech.emit(warning_message)
                 tts_latency_ms = (time.perf_counter() - audio_started) * 1000.0
                 event.metrics["audio_source"] = playback.source
+                event.metrics["audio_path"] = playback.audio_path
                 system_state.set_audio_source(playback.source)
                 if playback.emitted:
                     system_state.mark_alert_emitted()
@@ -923,6 +1156,7 @@ class VideoPipelineWorker:
                         "AUDIO",
                         f"[AUDIO] Advertencia emitida mediante {playback.source}.",
                     )
+                    self._observe_post_alert(event)
                 else:
                     system_state.add_log(
                         "ERROR",
@@ -985,6 +1219,8 @@ class VideoPipelineWorker:
             else:
                 completed_event = self._event_manager.complete_event(event)
             self._repository.save(completed_event)
+            if is_manual and decision == "WARN":
+                self._pending_manual_event_id = completed_event.id
             if not is_manual:
                 system_state.add_log("COOLDOWN", f"[ENFRIAMIENTO] Periodo de {settings.EVENT_COOLDOWN_SECONDS}s activado para evitar spam.")
             logger.info(f"Evento {event.id[:8]} completado → decisión: {decision}")

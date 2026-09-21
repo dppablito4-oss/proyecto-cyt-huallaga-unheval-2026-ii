@@ -38,6 +38,71 @@ const API = {
     }
   },
 
+  async getEventStatistics() {
+    try {
+      const res = await fetch('/api/events/statistics');
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error('Error al consultar estadísticas de eventos:', e);
+      return null;
+    }
+  },
+
+  async getZones() {
+    try {
+      const res = await fetch('/api/scene/zones');
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error('Error al consultar zonas:', e);
+      return [];
+    }
+  },
+
+  async saveZones(zones) {
+    try {
+      const res = await fetch('/api/scene/zones', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zones })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || `HTTP error! status: ${res.status}`);
+      return data;
+    } catch (e) {
+      console.error('Error al guardar zonas:', e);
+      return { error: e.message };
+    }
+  },
+
+  async getDetectionClasses() {
+    try {
+      const res = await fetch('/api/config/detection-classes');
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error('Error al consultar clases YOLOE:', e);
+      return null;
+    }
+  },
+
+  async updateDetectionClasses(classes) {
+    try {
+      const res = await fetch('/api/config/detection-classes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ classes })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || `HTTP error! status: ${res.status}`);
+      return data;
+    } catch (e) {
+      console.error('Error al actualizar clases YOLOE:', e);
+      return { error: e.message };
+    }
+  },
+
   /**
    * Obtiene los parámetros de configuración seguros (no sensibles) del backend.
    * Endpoint: GET /api/config

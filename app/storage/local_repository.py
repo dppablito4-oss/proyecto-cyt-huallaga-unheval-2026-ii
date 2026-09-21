@@ -57,9 +57,21 @@ class SQLiteEventsRepository(EventsRepository):
                         started_at TEXT,
                         ended_at TEXT,
                         status TEXT,
+                        desistimiento_confirmado INTEGER,
+                        post_alert_outcome TEXT,
                         data_json TEXT
                     )
                 """)
+                columns = {
+                    row["name"]
+                    for row in conn.execute("PRAGMA table_info(events)").fetchall()
+                }
+                if "desistimiento_confirmado" not in columns:
+                    conn.execute(
+                        "ALTER TABLE events ADD COLUMN desistimiento_confirmado INTEGER"
+                    )
+                if "post_alert_outcome" not in columns:
+                    conn.execute("ALTER TABLE events ADD COLUMN post_alert_outcome TEXT")
                 conn.commit()
         except Exception as e:
             logger.error(f"Error al inicializar base de datos SQLite: {e}")
@@ -72,8 +84,11 @@ class SQLiteEventsRepository(EventsRepository):
             with self._get_connection() as conn:
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO events (id, camera_id, started_at, ended_at, status, data_json)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO events (
+                        id, camera_id, started_at, ended_at, status,
+                        desistimiento_confirmado, post_alert_outcome, data_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         event.id,
@@ -81,6 +96,12 @@ class SQLiteEventsRepository(EventsRepository):
                         event.started_at.isoformat(),
                         event.ended_at.isoformat() if event.ended_at else None,
                         event.status,
+                        (
+                            None
+                            if event.desistimiento_confirmado is None
+                            else int(event.desistimiento_confirmado)
+                        ),
+                        event.post_alert_outcome,
                         event.model_dump_json()
                     )
                 )
@@ -99,7 +120,9 @@ class SQLiteEventsRepository(EventsRepository):
                 cursor = conn.execute("SELECT data_json FROM events WHERE id = ?", (event_id,))
                 row = cursor.fetchone()
                 if row:
-                    return EventModel.model_validate_json(row["data_json"])
+                    return self._hydrate_legacy_paths(
+                        EventModel.model_validate_json(row["data_json"])
+                    )
                 return None
         except Exception as e:
             logger.error(f"Error recuperando evento {event_id} de SQLite: {e}")
@@ -118,10 +141,27 @@ class SQLiteEventsRepository(EventsRepository):
                 events = []
                 for row in rows:
                     try:
-                        events.append(EventModel.model_validate_json(row["data_json"]))
+                        events.append(
+                            self._hydrate_legacy_paths(
+                                EventModel.model_validate_json(row["data_json"])
+                            )
+                        )
                     except Exception:
                         pass
                 return events
         except Exception as e:
             logger.error(f"Error consultando eventos recientes en SQLite: {e}")
             return []
+
+    def _hydrate_legacy_paths(self, event: EventModel) -> EventModel:
+        """Recupera previews antiguos cuyo evento se guardó antes de `frame_paths`."""
+        if event.capture.frame_paths:
+            return event
+        frames_dir = self.db_path.parent / "frames"
+        if not frames_dir.is_dir():
+            return event
+        matches = sorted(frames_dir.glob(f"auto-preview-{event.id[:8]}-*.jpg"))
+        if matches:
+            event.capture.frame_paths = [str(path.resolve()) for path in matches[:4]]
+            event.capture.selected_frames = len(event.capture.frame_paths)
+        return event

@@ -94,6 +94,13 @@ class EventModel(BaseModel):
     openai_used: bool = False
     openai_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
     final_decision: Optional[str] = None
+
+    # Resultado observable del estímulo acústico. `None` significa que no hubo
+    # advertencia reproducida o que no fue posible observar el periodo posterior.
+    desistimiento_confirmado: Optional[bool] = None
+    post_alert_outcome: Optional[str] = None
+    post_alert_observed_at: Optional[datetime] = None
+    post_alert_observation_seconds: Optional[float] = Field(None, ge=0.0)
     
     # Metadatos de compresión y fotogramas
     capture: CaptureMetadata = Field(default_factory=CaptureMetadata)

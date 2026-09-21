@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import threading
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -22,6 +24,7 @@ class ZoneManager:
         self.camera_id = camera_id
         self.zones = list(zones)
         self._scaled_cache: dict[tuple[int, int], dict[str, np.ndarray]] = {}
+        self._lock = threading.RLock()
 
     @classmethod
     def from_json(cls, path: Path | str, camera_id: str) -> "ZoneManager":
@@ -58,24 +61,67 @@ class ZoneManager:
         if height <= 0 or width <= 0:
             raise ValueError("El frame debe tener dimensiones positivas.")
         cache_key = (width, height)
-        if cache_key not in self._scaled_cache:
-            self._scaled_cache[cache_key] = {
-                zone.name: np.asarray(
-                    [
+        with self._lock:
+            if cache_key not in self._scaled_cache:
+                self._scaled_cache[cache_key] = {
+                    zone.name: np.asarray(
                         [
-                            min(width - 1, round(point.x * width)),
-                            min(height - 1, round(point.y * height)),
-                        ]
-                        for point in zone.polygon
-                    ],
-                    dtype=np.int32,
-                )
-                for zone in self.zones
+                            [
+                                min(width - 1, round(point.x * width)),
+                                min(height - 1, round(point.y * height)),
+                            ]
+                            for point in zone.polygon
+                        ],
+                        dtype=np.int32,
+                    )
+                    for zone in self.zones
+                }
+            return {
+                name: polygon.copy()
+                for name, polygon in self._scaled_cache[cache_key].items()
             }
-        return {
-            name: polygon.copy()
-            for name, polygon in self._scaled_cache[cache_key].items()
+
+    def definitions(self) -> list[ZoneDefinition]:
+        """Devuelve una copia segura de las zonas activas."""
+        with self._lock:
+            return [zone.model_copy(deep=True) for zone in self.zones]
+
+    def replace(self, zones: Sequence[ZoneDefinition]) -> None:
+        """Reemplaza las zonas en caliente e invalida polígonos escalados."""
+        with self._lock:
+            self.zones = [zone.model_copy(deep=True) for zone in zones]
+            self._scaled_cache.clear()
+
+    @staticmethod
+    def save_json(
+        path: Path | str,
+        camera_id: str,
+        zones: Sequence[ZoneDefinition],
+    ) -> None:
+        """Persiste una cámara sin destruir las zonas de las demás cámaras."""
+        config_path = Path(path)
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        payload: dict[str, Any] = {}
+        if config_path.is_file():
+            try:
+                payload = json.loads(config_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as exc:
+                raise ValueError(f"No se pudo leer la configuración de zonas: {exc}") from exc
+        payload[camera_id] = {
+            "zones": {
+                zone.name: {
+                    "polygon": [[point.x, point.y] for point in zone.polygon],
+                    "priority": zone.priority,
+                }
+                for zone in zones
+            }
         }
+        temp_path = config_path.with_suffix(config_path.suffix + ".tmp")
+        temp_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temp_path, config_path)
 
     def locate(
         self,
@@ -83,41 +129,43 @@ class ZoneManager:
         frame_shape: Sequence[int],
     ) -> tuple[dict[int, str | None], dict[str, ZoneState]]:
         """Asigna una zona por prioridad usando el ancla inferior central."""
-        zone_states = {
-            zone.name: ZoneState(name=zone.name)
-            for zone in self.zones
-        }
-        assignments = {track.track_id: None for track in tracks}
-        if not tracks or not self.zones:
+        with self._lock:
+            zones = [zone.model_copy(deep=True) for zone in self.zones]
+            zone_states = {
+                zone.name: ZoneState(name=zone.name)
+                for zone in zones
+            }
+            assignments = {track.track_id: None for track in tracks}
+            if not tracks or not zones:
+                return assignments, zone_states
+
+            import supervision as sv
+
+            detections = sv.Detections(
+                xyxy=np.asarray(
+                    [
+                        [track.bbox.x1, track.bbox.y1, track.bbox.x2, track.bbox.y2]
+                        for track in tracks
+                    ],
+                    dtype=np.float32,
+                ),
+                confidence=np.asarray([track.confidence for track in tracks], dtype=np.float32),
+                class_id=np.asarray([track.class_id for track in tracks], dtype=np.int32),
+                tracker_id=np.asarray([track.track_id for track in tracks], dtype=np.int32),
+            )
+            polygons = self.pixel_polygons(frame_shape)
+            ordered_zones = sorted(
+                enumerate(zones),
+                key=lambda item: (-item[1].priority, item[0]),
+            )
+            for _, definition in ordered_zones:
+                polygon_zone = sv.PolygonZone(polygon=polygons[definition.name])
+                inside = polygon_zone.trigger(detections)
+                for index, is_inside in enumerate(inside):
+                    if not is_inside:
+                        continue
+                    track_id = tracks[index].track_id
+                    zone_states[definition.name].track_ids.append(track_id)
+                    if assignments[track_id] is None:
+                        assignments[track_id] = definition.name
             return assignments, zone_states
-
-        import supervision as sv
-
-        detections = sv.Detections(
-            xyxy=np.asarray(
-                [
-                    [track.bbox.x1, track.bbox.y1, track.bbox.x2, track.bbox.y2]
-                    for track in tracks
-                ],
-                dtype=np.float32,
-            ),
-            confidence=np.asarray([track.confidence for track in tracks], dtype=np.float32),
-            class_id=np.asarray([track.class_id for track in tracks], dtype=np.int32),
-            tracker_id=np.asarray([track.track_id for track in tracks], dtype=np.int32),
-        )
-        polygons = self.pixel_polygons(frame_shape)
-        ordered_zones = sorted(
-            enumerate(self.zones),
-            key=lambda item: (-item[1].priority, item[0]),
-        )
-        for _, definition in ordered_zones:
-            polygon_zone = sv.PolygonZone(polygon=polygons[definition.name])
-            inside = polygon_zone.trigger(detections)
-            for index, is_inside in enumerate(inside):
-                if not is_inside:
-                    continue
-                track_id = tracks[index].track_id
-                zone_states[definition.name].track_ids.append(track_id)
-                if assignments[track_id] is None:
-                    assignments[track_id] = definition.name
-        return assignments, zone_states
