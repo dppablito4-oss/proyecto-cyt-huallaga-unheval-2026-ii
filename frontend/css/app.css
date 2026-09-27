@@ -1101,6 +1101,46 @@ textarea::placeholder {
   margin-bottom: 13px;
 }
 
+.event-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-export-event-pdf {
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.btn-export-event-pdf:hover {
+  opacity: 0.9;
+}
+
+.btn-delete-event {
+  padding: 4px 9px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm, 6px);
+  color: #f87171 !important;
+  border-color: rgba(248, 113, 113, 0.28) !important;
+  background: rgba(239, 68, 68, 0.08) !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-delete-event:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2) !important;
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  color: #fecaca !important;
+}
+
+
+
 .event-card-time {
   margin: 4px 0 0;
   color: var(--text);

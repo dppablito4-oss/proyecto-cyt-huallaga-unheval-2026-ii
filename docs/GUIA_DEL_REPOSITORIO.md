@@ -68,8 +68,9 @@ SQLite + dashboard + logs
 | `prompts/environmental_event.txt` | Instrucciones que sigue el modelo de visión. |
 | `app/events/` | Reglas de decisión y cooldown del modo automático. |
 | `app/speech/` | Generación TTS y reproducción por altavoz. |
-| `app/storage/` | Guarda eventos en SQLite. |
-| `app/api/routes/` | Endpoints REST para estado, cámara, pruebas y control. |
+| `app/storage/` | Guarda eventos y logs relacionales en SQLite (`events` y `event_logs`). |
+| `app/reports/` | Generación de reportes PDF con ReportLab y marcas institucionales UNHEVAL / SIVARH. |
+| `app/api/routes/` | Endpoints REST para estado, cámara, eventos, reportes, pruebas y control. |
 | `frontend/` | Dashboard web: HTML, estilos y JavaScript. |
 | `data/` | Audios, fotogramas y base de datos creados durante ejecución. |
 | `tests/` | Pruebas unitarias. |
@@ -104,6 +105,7 @@ El dashboard está en `frontend/`:
 | `frontend/js/app.js` | Acciones de los botones. |
 | `frontend/js/api.js` | Llamadas HTTP al backend. |
 | `frontend/js/dashboard.js` | Actualiza métricas, secuencia y consola. |
+| `frontend/js/event_history.js` | Tarjetas de incidencias, descargas PDF y eliminación de pruebas. |
 | `frontend/js/websocket.js` | Recibe el estado en vivo por WebSocket. |
 | `frontend/css/app.css` | Estilos del panel. |
 
@@ -116,7 +118,11 @@ El dashboard está en `frontend/`:
 | `POST` | `/api/system/manual/start-recognition` | Inicia la captura manual de 4 imágenes. |
 | `POST` | `/api/system/manual/send-images` | Envía la secuencia manual a OpenAI Vision. |
 | `GET` | `/api/status` | Estado en vivo, logs y progreso de la secuencia. |
-| `GET` | `/api/events` | Eventos guardados en SQLite. |
+| `GET` | `/api/events` | Eventos guardados en SQLite con sus logs asociados. |
+| `GET` | `/api/events/{id}/pdf` | Descarga el reporte PDF de una incidencia histórica. |
+| `DELETE` | `/api/events/{id}` | Elimina una incidencia y sus logs/fotogramas. |
+| `DELETE` | `/api/events` | Limpia todas las incidencias de prueba registradas. |
+| `GET` | `/api/reports/evidence.pdf` | Descarga el reporte PDF de la sesión activa en vivo. |
 | `POST` | `/api/debug/test-speech` | Prueba la generación de voz. |
 | `GET` | `/docs` | Documentación interactiva de FastAPI. |
 | `WS` | `/ws` | Canal usado por el dashboard para recibir cambios. |

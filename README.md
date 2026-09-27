@@ -173,11 +173,11 @@ huallaga-ai-monitor/
 │   │
 │   ├── reports/                      # Generación de Reportes Forenses
 │   │   ├── __init__.py
-│   │   └── pdf.py                    # Generador de reportes en PDF con ReportLab
+│   │   └── pdf_report.py             # Generador de reportes en PDF con ReportLab (logos UNHEVAL + SIVARH)
 │   │
 │   ├── storage/                      # Persistencia de Datos
-│   │   ├── events_repository.py      # Interfaz abstracta de repositorio
-│   │   └── local_repository.py       # Base de datos SQLite local (data/events.db)
+│   │   ├── events_repository.py      # Interfaz abstracta de repositorio (CRUD, logs y borrado)
+│   │   └── local_repository.py       # Base SQLite local (tablas events y event_logs relacional)
 │   │
 │   ├── metrics/                      # Métricas para Investigación Científica
 │   │   ├── collector.py              # Agregador de registros
@@ -193,11 +193,12 @@ huallaga-ai-monitor/
 │       ├── routes/
 │       │   ├── status.py             # GET /api/status, /api/metrics y /api/health
 │       │   ├── system.py             # Controles de inicio/parada, logs y secuencia manual
-│       │   ├── events.py             # GET /api/events y GET /api/events/{id}
+│       │   ├── events.py             # GET/DELETE /api/events, GET/DELETE /api/events/{id}, GET /api/events/{id}/pdf
 │       │   ├── cameras.py            # Stream MJPEG, status, conmutación y previews
 │       │   ├── scene.py              # GET /api/scene (estado espacial estructurado)
-│       │   ├── reports.py            # GET /api/reports/evidence.pdf (exportación PDF)
+│       │   ├── reports.py            # GET /api/reports/evidence.pdf (exportación PDF en vivo)
 │       │   ├── config.py             # GET & PATCH /api/config
+
 │       │   └── debug.py              # Pruebas manuales de TTS, Luna y análisis multimodal
 │       └── websocket.py              # WS /ws para sincronización reactiva
 │
@@ -263,6 +264,26 @@ huallaga-ai-monitor/
 ├── documentacion.md                  # Memoria técnica oficial del proyecto
 └── README.md                         # Este documento
 ```
+
+---
+
+## Ejecutable portable para Windows
+
+La compilación lista para pruebas se genera en `release/SIVARH-Windows.zip`.
+En la computadora de destino se debe descomprimir **todo** el ZIP y ejecutar
+`INICIAR_SIVARH.bat` o `SIVARH.exe`; el programa abre automáticamente el
+dashboard en `http://127.0.0.1:8000`. No se debe separar el ejecutable de la
+carpeta `_internal`, los modelos ni los recursos incluidos.
+
+Para reconstruir el paquete en Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build_windows_exe.ps1
+```
+
+El paquete conserva la misma configuración operativa del proyecto, el detector
+YOLOE, tracking, OpenAI Vision/TTS, historial, calibración de zonas y archivos
+de audio locales.
 
 ---
 
@@ -477,9 +498,12 @@ Las siguientes brechas de la lista anterior ya están resueltas en el prototipo 
 
 - calibración visual de `observation`, `riverbank` y `water` directamente sobre el video, con persistencia atómica y aplicación en caliente;
 - observación post-alerta de cinco segundos, transición `RELEASED → CARRIED` y columna SQLite `desistimiento_confirmado`;
-- historial web de incidencias con hasta cuatro fotogramas, diagnóstico, decisión, resultado del nudge y audio reproducible;
+- historial web de incidencias con hasta cuatro fotogramas, diagnóstico, decisión, resultado del nudge, audio reproducible, descarga de reportes PDF y eliminación de pruebas;
+- exportación formal de reportes de evidencia forense en PDF con ReportLab (`build_evidence_pdf` y `build_event_pdf`), incorporando en la cabecera el imagotipo oficial de SIVARH y el escudo de la UNHEVAL;
+- persistencia relacional estructurada de logs por evento mediante la tabla interna SQLite `event_logs` vinculada a cada incidencia;
 - reconexión automática de cámara cada dos segundos y reproducción continua de archivos de prueba;
 - actualización asincrónica del vocabulario YOLOE desde el dashboard, con embeddings y clases persistentes.
+
 
 ---
 

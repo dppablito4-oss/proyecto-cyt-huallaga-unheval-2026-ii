@@ -1218,13 +1218,17 @@ class VideoPipelineWorker:
                 completed_event = event
             else:
                 completed_event = self._event_manager.complete_event(event)
+
+            try:
+                completed_event.metrics["logs"] = system_state.snapshot().get("logs", [])
+            except Exception as log_exc:
+                logger.warning(f"No se pudieron adjuntar logs al evento: {log_exc}")
+
             self._repository.save(completed_event)
             if is_manual and decision == "WARN":
                 self._pending_manual_event_id = completed_event.id
             if not is_manual:
                 system_state.add_log("COOLDOWN", f"[ENFRIAMIENTO] Periodo de {settings.EVENT_COOLDOWN_SECONDS}s activado para evitar spam.")
-            logger.info(f"Evento {event.id[:8]} completado → decisión: {decision}")
-
         except Exception as e:
             logger.error(f"Error procesando evento: {e}")
             if not is_manual:

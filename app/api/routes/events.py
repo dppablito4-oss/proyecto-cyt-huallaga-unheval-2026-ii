@@ -13,14 +13,17 @@ Endpoints:
 - `GET /api/events/{event_id}`: Devuelve el objeto `EventModel` completo asociado a un UUID específico.
 """
 
+from datetime import datetime
 from pathlib import Path
+from typing import List
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from typing import List
 from app.config import settings
 from app.models.event import EventModel
+from app.reports import build_event_pdf
 from app.storage.local_repository import SQLiteEventsRepository
+
 
 router = APIRouter(prefix="/events")
 repo = SQLiteEventsRepository()
@@ -83,6 +86,30 @@ def get_event_audio(event_id: str):
     return FileResponse(path, media_type=media_type)
 
 
+@router.get("/{event_id}/pdf", summary="Exportar reporte PDF de una incidencia histórica")
+def export_event_pdf(event_id: str):
+    """
+    Genera un reporte PDF formal con fotogramas, metadatos, diagnóstico de IA,
+    decisión y logs (si estuvieran guardados) para una incidencia específica.
+    """
+    event = repo.get_by_id(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail=f"Evento con ID '{event_id}' no encontrado.")
+    
+    generated_at = datetime.now()
+    output_dir = settings.BASE_DIR / "output" / "pdf"
+    output_path = output_dir / f"SIVARH_evento_{event_id[:8]}_{generated_at:%Y%m%d_%H%M%S}.pdf"
+    build_event_pdf(output_path, event, generated_at)
+    
+    filename = f"SIVARH_incidencia_{event_id[:8]}_{generated_at:%Y%m%d_%H%M%S}.pdf"
+    return FileResponse(
+        output_path,
+        media_type="application/pdf",
+        filename=filename,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/{event_id}", response_model=EventModel, summary="Consultar detalle de un evento")
 def get_event_detail(event_id: str):
     """
@@ -93,3 +120,25 @@ def get_event_detail(event_id: str):
     if not event:
         raise HTTPException(status_code=404, detail=f"Evento con ID '{event_id}' no encontrado.")
     return event
+
+
+@router.delete("/{event_id}", summary="Eliminar una incidencia registrada")
+def delete_event(event_id: str):
+    """
+    Elimina un evento del historial, sus registros en la tabla SQL event_logs y sus fotogramas.
+    """
+    deleted = repo.delete(event_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"No se encontró el evento con ID '{event_id}' o no se pudo eliminar.")
+    return {"status": "ok", "deleted_id": event_id}
+
+
+@router.delete("", summary="Eliminar todas las incidencias de prueba registradas")
+def clear_all_events():
+    """
+    Limpia la colección de eventos de prueba y sus logs asociados en SQLite.
+    """
+    count = repo.clear_all()
+    return {"status": "ok", "deleted_count": count}
+
+

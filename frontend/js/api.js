@@ -292,5 +292,46 @@ const API = {
       console.error('Error al exportar el reporte PDF:', e);
       return null;
     }
+  },
+
+  async exportEventPdf(eventId) {
+    try {
+      const res = await fetch(`/api/events/${encodeURIComponent(eventId)}/pdf`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      return { blob: await res.blob(), filename: match?.[1] || `SIVARH_incidencia_${eventId.slice(0, 8)}.pdf` };
+    } catch (e) {
+      console.error('Error al exportar el reporte PDF del evento:', e);
+      return null;
+    }
+  },
+
+  async deleteEvent(eventId) {
+    try {
+      const res = await fetch(`/api/events/${encodeURIComponent(eventId)}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error(`Error al eliminar el evento ${eventId}:`, e);
+      return null;
+    }
+  },
+
+  async clearEvents() {
+    try {
+      const res = await fetch('/api/events', {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.error('Error al limpiar los eventos:', e);
+      return null;
+    }
   }
 };
+
+

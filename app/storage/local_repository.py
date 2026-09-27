@@ -62,6 +62,17 @@ class SQLiteEventsRepository(EventsRepository):
                         data_json TEXT
                     )
                 """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS event_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        event_id TEXT NOT NULL,
+                        logged_at TEXT,
+                        level TEXT,
+                        message TEXT,
+                        FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE CASCADE
+                    )
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_event_logs_event_id ON event_logs(event_id)")
                 columns = {
                     row["name"]
                     for row in conn.execute("PRAGMA table_info(events)").fetchall()
@@ -78,7 +89,7 @@ class SQLiteEventsRepository(EventsRepository):
 
     def save(self, event: EventModel) -> bool:
         """
-        Inserta o actualiza un registro de evento en la tabla `events`.
+        Inserta o actualiza un registro de evento en la tabla `events` y sus logs en `event_logs`.
         """
         try:
             with self._get_connection() as conn:
@@ -105,24 +116,65 @@ class SQLiteEventsRepository(EventsRepository):
                         event.model_dump_json()
                     )
                 )
+
+                # Guardar logs en la tabla SQL relacional event_logs
+                logs = (
+                    event.metrics.get("logs")
+                    or (event.event_trace.get("logs") if isinstance(event.event_trace, dict) else [])
+                    or []
+                )
+                if logs:
+                    conn.execute("DELETE FROM event_logs WHERE event_id = ?", (event.id,))
+                    for log in logs:
+                        conn.execute(
+                            """
+                            INSERT INTO event_logs (event_id, logged_at, level, message)
+                            VALUES (?, ?, ?, ?)
+                            """,
+                            (
+                                event.id,
+                                log.get("time") or datetime.now().isoformat(),
+                                log.get("level", "INFO"),
+                                log.get("message", "")
+                            )
+                        )
                 conn.commit()
                 return True
         except Exception as e:
             logger.error(f"Error guardando evento {event.id} en SQLite: {e}")
             return False
 
+    def get_event_logs(self, event_id: str) -> List[dict]:
+        """Recupera los logs asociados a un evento específico desde la base de datos SQL."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.execute(
+                    "SELECT logged_at as time, level, message FROM event_logs WHERE event_id = ? ORDER BY id ASC",
+                    (event_id,)
+                )
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error consultando logs del evento {event_id} en SQLite: {e}")
+            return []
+
     def get_by_id(self, event_id: str) -> Optional[EventModel]:
         """
-        Busca un evento por su ID primario y deserializa el JSON a `EventModel`.
+        Busca un evento por su ID primario, deserializa el JSON a `EventModel`
+        e hidrata sus logs desde la tabla `event_logs`.
         """
         try:
             with self._get_connection() as conn:
                 cursor = conn.execute("SELECT data_json FROM events WHERE id = ?", (event_id,))
                 row = cursor.fetchone()
                 if row:
-                    return self._hydrate_legacy_paths(
+                    event = self._hydrate_legacy_paths(
                         EventModel.model_validate_json(row["data_json"])
                     )
+                    if not event.metrics.get("logs"):
+                        sql_logs = self.get_event_logs(event.id)
+                        if sql_logs:
+                            event.metrics["logs"] = sql_logs
+                    return event
                 return None
         except Exception as e:
             logger.error(f"Error recuperando evento {event_id} de SQLite: {e}")
@@ -130,7 +182,8 @@ class SQLiteEventsRepository(EventsRepository):
 
     def list_recent(self, limit: int = 20) -> List[EventModel]:
         """
-        Recupera los últimos $limit$ eventos ordenados cronológicamente desde el más reciente.
+        Recupera los últimos $limit$ eventos ordenados cronológicamente desde el más reciente
+        con sus logs asociados.
         """
         try:
             with self._get_connection() as conn:
@@ -141,17 +194,69 @@ class SQLiteEventsRepository(EventsRepository):
                 events = []
                 for row in rows:
                     try:
-                        events.append(
-                            self._hydrate_legacy_paths(
-                                EventModel.model_validate_json(row["data_json"])
-                            )
+                        ev = self._hydrate_legacy_paths(
+                            EventModel.model_validate_json(row["data_json"])
                         )
+                        if not ev.metrics.get("logs"):
+                            sql_logs = self.get_event_logs(ev.id)
+                            if sql_logs:
+                                ev.metrics["logs"] = sql_logs
+                        events.append(ev)
                     except Exception:
                         pass
                 return events
         except Exception as e:
             logger.error(f"Error consultando eventos recientes en SQLite: {e}")
             return []
+
+    def delete(self, event_id: str) -> bool:
+        """
+        Elimina un evento registrado, sus logs en SQL y sus fotogramas de evidencia asociados.
+        """
+        try:
+            event = self.get_by_id(event_id)
+            with self._get_connection() as conn:
+                conn.execute("DELETE FROM event_logs WHERE event_id = ?", (event_id,))
+                cursor = conn.execute("DELETE FROM events WHERE id = ?", (event_id,))
+                conn.commit()
+                deleted = cursor.rowcount > 0
+            if event and event.capture and event.capture.frame_paths:
+                for fp in event.capture.frame_paths:
+                    try:
+                        p = Path(fp)
+                        if not p.is_absolute():
+                            p = self.db_path.parent.parent / p
+                        if p.is_file():
+                            p.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+            return deleted
+        except Exception as e:
+            logger.error(f"Error eliminando evento {event_id} de SQLite: {e}")
+            return False
+
+    def clear_all(self) -> int:
+        """
+        Elimina todos los eventos registrados en la base de datos, sus logs y fotogramas.
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.execute("SELECT COUNT(*) FROM events")
+                total = cursor.fetchone()[0]
+                conn.execute("DELETE FROM event_logs")
+                conn.execute("DELETE FROM events")
+                conn.commit()
+            frames_dir = self.db_path.parent / "frames"
+            if frames_dir.is_dir():
+                for frame_file in frames_dir.glob("*.jpg"):
+                    try:
+                        frame_file.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+            return total
+        except Exception as e:
+            logger.error(f"Error limpiando eventos en SQLite: {e}")
+            return 0
 
     def _hydrate_legacy_paths(self, event: EventModel) -> EventModel:
         """Recupera previews antiguos cuyo evento se guardó antes de `frame_paths`."""
@@ -165,3 +270,4 @@ class SQLiteEventsRepository(EventsRepository):
             event.capture.frame_paths = [str(path.resolve()) for path in matches[:4]]
             event.capture.selected_frames = len(event.capture.frame_paths)
         return event
+

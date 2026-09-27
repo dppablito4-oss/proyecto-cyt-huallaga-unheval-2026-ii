@@ -38,3 +38,18 @@ class EventsRepository(ABC):
     def list_recent(self, limit: int = 20) -> List[EventModel]:
         """Devuelve los $N$ eventos más recientes ordenados por fecha descendente."""
         pass
+
+    @abstractmethod
+    def delete(self, event_id: str) -> bool:
+        """Elimina un evento y sus registros asociados del repositorio."""
+        pass
+
+    @abstractmethod
+    def clear_all(self) -> int:
+        """Elimina todos los eventos registrados y devuelve la cantidad eliminada."""
+        pass
+
+    def get_event_logs(self, event_id: str) -> List[dict]:
+        """Recupera los logs asociados a un evento específico."""
+        return []
+

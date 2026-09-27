@@ -5,8 +5,11 @@ param(
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $buildRoot = Join-Path $projectRoot "build"
-$distRoot = Join-Path $buildRoot "dist"
-$workRoot = Join-Path $buildRoot "pyinstaller"
+$buildSession = "{0}-{1}" -f (Get-Date -Format "yyyyMMddHHmmss"), $PID
+# Cada compilacion usa carpetas nuevas. Esto evita bloqueos temporales de
+# OneDrive/antivirus sobre los artefactos de una compilacion anterior.
+$distRoot = Join-Path $buildRoot "dist-$buildSession"
+$workRoot = Join-Path $buildRoot "pyinstaller-$buildSession"
 $releaseRoot = Join-Path $projectRoot "release"
 $releaseDir = Join-Path $releaseRoot $ReleaseName
 $zipPath = Join-Path $releaseRoot "$ReleaseName.zip"

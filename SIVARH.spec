@@ -16,7 +16,12 @@ hiddenimports = [
     "uvicorn.lifespan.on",
     "websockets.legacy.server",
     "httptools",
+    # pkg_resources exposes its vendored modules through a dynamic importer.
+    # PyInstaller cannot discover them reliably without this explicit entry.
+    "pkg_resources._vendor.appdirs",
 ]
+
+hiddenimports += collect_submodules("pkg_resources._vendor")
 
 # Estas librerías cargan componentes de forma dinámica en tiempo de ejecución.
 for package in (

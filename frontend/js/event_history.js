@@ -1,9 +1,23 @@
 const EventHistory = {
   async init() {
     document.getElementById('btn-refresh-history')?.addEventListener('click', () => this.load());
+    document.getElementById('btn-clear-history')?.addEventListener('click', async () => {
+      if (confirm('¿Deseas eliminar todas las pruebas registradas del historial? Esta acción vaciará la base de datos de eventos y logs asociados.')) {
+        const btn = document.getElementById('btn-clear-history');
+        if (btn) btn.disabled = true;
+        const res = await API.clearEvents();
+        if (res?.status === 'ok') {
+          await this.load();
+        } else {
+          alert('No se pudo limpiar el historial de pruebas.');
+        }
+        if (btn) btn.disabled = false;
+      }
+    });
     await this.load();
     window.setInterval(() => this.load(), 30000);
   },
+
 
   async load() {
     const button = document.getElementById('btn-refresh-history');
@@ -71,10 +85,65 @@ const EventHistory = {
       ? event.started_at
       : parsedDate.toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'medium' });
     heading.append(label, time);
+
+    const actions = document.createElement('div');
+    actions.className = 'event-card-actions';
+
     const decision = document.createElement('span');
     decision.className = `decision-badge ${event.decision === 'WARN' ? 'warn' : event.decision === 'LOG_ONLY' ? 'log-only' : 'ignore'}`;
     decision.textContent = event.decision || 'SIN DECISIÓN';
-    header.append(heading, decision);
+
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'btn btn-secondary btn-export-event-pdf';
+    exportBtn.type = 'button';
+    exportBtn.textContent = 'PDF';
+    exportBtn.title = 'Exportar reporte PDF completo con metadatos, fotogramas y logs';
+    exportBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      exportBtn.disabled = true;
+      exportBtn.textContent = 'Generando…';
+      const result = await API.exportEventPdf(event.id);
+      if (result?.blob) {
+        const url = URL.createObjectURL(result.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = result.filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } else {
+        alert('No se pudo generar el reporte PDF de esta incidencia.');
+      }
+      exportBtn.disabled = false;
+      exportBtn.textContent = 'PDF';
+    });
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'btn btn-quiet btn-delete-event';
+    deleteBtn.type = 'button';
+    deleteBtn.textContent = 'Eliminar';
+    deleteBtn.title = 'Eliminar esta prueba registrada';
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (confirm('¿Deseas eliminar esta prueba registrada del historial?')) {
+        deleteBtn.disabled = true;
+        deleteBtn.textContent = '…';
+        const res = await API.deleteEvent(event.id);
+        if (res?.status === 'ok') {
+          await this.load();
+        } else {
+          alert('No se pudo eliminar la incidencia.');
+          deleteBtn.disabled = false;
+          deleteBtn.textContent = 'Eliminar';
+        }
+      }
+    });
+
+    actions.append(decision, exportBtn, deleteBtn);
+    header.append(heading, actions);
+
+
 
     const diagnosis = document.createElement('p');
     diagnosis.className = 'event-card-diagnosis';

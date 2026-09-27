@@ -203,8 +203,8 @@ SIVARH está construido bajo el principio de **separación estricta de responsab
 | **Síntesis de Voz** | [`app/speech/openai_tts.py`](app/speech/openai_tts.py) | OpenAI TTS dinámico en PCM y generación WAV; normaliza la cabecera de archivos recibidos por streaming. |
 | **Catálogo de Voz** | [`app/speech/cached_warning.py`](app/speech/cached_warning.py) | Caché por contenido, rotación de advertencias OpenAI pre-generadas y fallback local de emergencia. |
 | **Reproducción Local** | [`app/speech/audio_output.py`](app/speech/audio_output.py) | Emisión física del audio a través de los altavoces de la estación de borde. |
-| **Generación de Reportes** | [`app/reports/pdf.py`](app/reports/pdf.py) | Compilación automática de reportes forenses en PDF con capturas y telemetría. |
-| **Almacenamiento** | [`app/storage/local_repository.py`](app/storage/local_repository.py) | Base de datos SQLite para auditoría forense de eventos, imágenes clave y decisiones. |
+| **Generación de Reportes** | [`app/reports/pdf_report.py`](app/reports/pdf_report.py) | Compilación automática de reportes forenses en PDF con ReportLab, cabecera institucional (UNHEVAL y SIVARH), fotogramas y logs de sesión/evento. |
+| **Almacenamiento** | [`app/storage/local_repository.py`](app/storage/local_repository.py) | Base de datos SQLite para auditoría forense (`events`), tabla relacional de logs (`event_logs`) y métodos de depuración/borrado. |
 | **Dashboard Frontend** | [`frontend/`](frontend/) | Interfaz gráfica web moderna con streaming en vivo, métricas, controles y visualizador de secuencias. |
 
 ---
@@ -370,12 +370,12 @@ El sistema cuenta con una exhaustiva suite de pruebas automatizadas con **pytest
 - **`test_pose.py`:** Estimación de keypoints y posturas biomecánicas.
 - **`test_frame_buffer.py` y `test_frame_selector.py`:** Ingesta muestreada y algoritmos de selección uniforme.
 - **`test_ai_schema.py`:** Validación del contrato estructurado JSON de OpenAI.
-- **`test_audio_output.py`:** Pipeline de reproducción de audio.
-- **`test_runtime_config.py`:** Modificación en caliente de parámetros vía API.
+- **`test_pdf_report.py`:** Generación y renderizado de reportes PDF (en vivo e históricos) con ReportLab y marcas institucionales.
+- **`test_event_storage.py`:** Almacenamiento relacional de logs en la tabla `event_logs`, borrado individual y limpieza total en SQLite.
 
-La suite se ejecuta con `python -m pytest -q` e incluye detección abierta, pérdida temporal, lanzamiento confirmado, prioridad de TTS dinámico, caché y rotación del catálogo OpenAI.
+La suite se ejecuta con `python -m pytest -q` e incluye detección abierta, pérdida temporal, lanzamiento confirmado, prioridad de TTS dinámico, caché, rotación del catálogo OpenAI, reportes PDF y persistencia relacional.
 
-**Resultado actual:** 96 pruebas aprobadas.
+**Resultado actual:** 101 pruebas aprobadas (32 archivos de test).
 
 Las advertencias se regeneran con `python scripts/generate_openai_warning_catalog.py --overwrite`. La voz escuchada es sintética y generada por IA mediante OpenAI TTS, no corresponde a una persona humana.
 
@@ -414,3 +414,5 @@ Desde septiembre de 2026, los puntos 10.1.1, 10.1.4, 10.2.2 y 10.4.2 se consider
 3. El worker mantiene la interfaz activa y reintenta abrir cámaras USB/RTSP cada dos segundos. Los archivos de video se rebobinan automáticamente.
 4. Después de una advertencia autónoma, el sistema observa el objeto durante cinco segundos y registra `desistimiento_confirmado` como columna binaria de SQLite.
 5. La galería de incidencias permite revisar fotogramas, veredictos, diagnóstico, resultado del nudge y audio histórico desde el navegador.
+6. Exportación de reportes forenses en PDF tanto de la sesión activa como de cada evento histórico, incorporando en la cabecera el escudo oficial de la UNHEVAL y el imagotipo de SIVARH.
+7. Conservación estructurada de logs del sistema por evento en una tabla interna relacional SQLite (`event_logs`) y opciones de depuración (eliminación puntual y limpieza total de pruebas desde el panel).
